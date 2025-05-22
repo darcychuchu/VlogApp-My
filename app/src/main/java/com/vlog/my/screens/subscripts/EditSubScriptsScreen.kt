@@ -70,28 +70,60 @@ fun EditSubScriptsScreen(
 
     // 状态变量
     var name by remember { mutableStateOf(userScripts?.name) }
-    var apiKey by remember { mutableStateOf(userScripts?.apiKey) }
-    var databaseName by remember { mutableStateOf(userScripts?.databaseName) }
+    var apiKey by remember { mutableStateOf(userScripts?.apiKey ?: "") }
+    var databaseName by remember { mutableStateOf(userScripts?.databaseName ?: "") }
 
-    val configObject = JSONObject(userScripts?.mappingConfig!!)
-    var itemsObject by remember { mutableStateOf(configObject.getJSONObject("itemsMapping")) }
-    var categoriesObject by remember { mutableStateOf(configObject.getJSONObject("categoriesMapping")) }
+    // Initial values from userScripts.mappingConfig
+    val initialConfigJsonString = userScripts?.mappingConfig ?: "{}"
+    val initialConfigObject = try { JSONObject(initialConfigJsonString) } catch (e: JSONException) { JSONObject() }
+    val initialItemsSourceUrl = initialConfigObject.optString("sourceUrl", "")
+    val initialFeedType = initialConfigObject.optString("feedType", "JSON") // Default to JSON if not found
+    val initialItemsMappingObject = initialConfigObject.optJSONObject("itemsMapping") ?: JSONObject()
 
-    var itemsConfig by remember { mutableStateOf(itemsObject.toString()) }
-    var categoriesConfig by remember { mutableStateOf(categoriesObject.toString()) }
+    var sourceUrl by remember { mutableStateOf(initialItemsSourceUrl) }
+    var selectedFeedType by remember { mutableStateOf(initialFeedType) }
 
-    var itemsState by remember {mutableIntStateOf(configObject.getInt("itemsState"))}
-    var categoriesState by remember {mutableIntStateOf(configObject.getInt("categoriesState"))}
+    // State variables for new mapping fields, initialized from existing config
+    var articleRootPath by remember { mutableStateOf(initialItemsMappingObject.optString("rootPath", "")) }
+    var idField by remember { mutableStateOf(initialItemsMappingObject.optString("idField", "")) }
+    var titleField by remember { mutableStateOf(initialItemsMappingObject.optString("titleField", "")) }
+    var contentField by remember { mutableStateOf(initialItemsMappingObject.optString("contentField", "")) }
+    var imageUrlField by remember { mutableStateOf(initialItemsMappingObject.optString("picField", "")) } // maps to picField
+    var categoryIdField by remember { mutableStateOf(initialItemsMappingObject.optString("categoryIdField", "")) }
+    var tagsField by remember { mutableStateOf(initialItemsMappingObject.optString("tagsField", "")) }
+    var sourceUrlField_mapping by remember { mutableStateOf(initialItemsMappingObject.optString("sourceUrlField", "")) } // maps to sourceUrlField
 
-    var enableItemsMapping by remember { mutableStateOf(itemsState == 1) }
-    var enableCategoriesMapping by remember { mutableStateOf(categoriesState == 1) }
-    var mappingConfig by remember { mutableStateOf(
-        """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-    ) }
+    var mappingConfig by remember { mutableStateOf(initialConfigJsonString) }
 
+    // Update mappingConfig whenever sourceUrl, feedType or any mapping field changes
+    LaunchedEffect(
+        sourceUrl, selectedFeedType, articleRootPath, idField, titleField, contentField,
+        imageUrlField, categoryIdField, tagsField, sourceUrlField_mapping
+    ) {
+        val itemsMappingObject = JSONObject()
+        itemsMappingObject.put("rootPath", articleRootPath)
+        itemsMappingObject.put("idField", idField)
+        itemsMappingObject.put("titleField", titleField)
+        itemsMappingObject.put("contentField", contentField)
+        if (imageUrlField.isNotBlank()) itemsMappingObject.put("picField", imageUrlField)
+        if (categoryIdField.isNotBlank()) itemsMappingObject.put("categoryIdField", categoryIdField)
+        if (tagsField.isNotBlank()) itemsMappingObject.put("tagsField", tagsField)
+        if (sourceUrlField_mapping.isNotBlank()) itemsMappingObject.put("sourceUrlField", sourceUrlField_mapping)
+        itemsMappingObject.put("apiUrlField", sourceUrl) // Populate apiUrlField with sourceUrl
+
+        val mainConfigObject = JSONObject()
+        mainConfigObject.put("sourceUrl", sourceUrl)
+        mainConfigObject.put("feedType", selectedFeedType) // Add feedType to mappingConfig
+        mainConfigObject.put("itemsMapping", itemsMappingObject)
+        // Retain existing categoriesMapping if present, otherwise add empty
+        mainConfigObject.put("categoriesMapping", initialConfigObject.optJSONObject("categoriesMapping") ?: JSONObject())
+
+
+        mappingConfig = mainConfigObject.toString()
+    }
 
     var isTyped by remember {
-        mutableIntStateOf(userScripts.isTyped)
+        mutableIntStateOf(userScripts?.isTyped ?: ContentType.NEWS.typeId)
     }
 
     //error info
@@ -141,12 +173,114 @@ fun EditSubScriptsScreen(
         ) {
             // API名称
             OutlinedTextField(
-                value = name.toString(),
+                value = name ?: "",
                 onValueChange = { name = it },
                 label = { Text("API名称") },
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = sourceUrl,
+                onValueChange = { sourceUrl = it },
+                label = { Text("源 URL") },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("请输入以 http:// 或 https:// 开头的有效URL") }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Feed Type Selection
+            Text("选择数据源类型:", style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val feedTypes = listOf("JSON", "RSS/XML") // Define feed types
+                feedTypes.forEach { type ->
+                    FilterChip(
+                        selected = selectedFeedType == type,
+                        onClick = { selectedFeedType = type },
+                        label = { Text(type) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Field Mapping Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("字段映射 (Items Mapping)", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = articleRootPath,
+                        onValueChange = { articleRootPath = it },
+                        label = { Text("文章根路径") },
+                        placeholder = { Text(text = "e.g., data.items or feed.entry") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = idField,
+                        onValueChange = { idField = it },
+                        label = { Text("ID 字段") },
+                        placeholder = { Text(text = "e.g., id or guid") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = titleField,
+                        onValueChange = { titleField = it },
+                        label = { Text("标题字段") },
+                        placeholder = { Text(text = "e.g., title or name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = contentField,
+                        onValueChange = { contentField = it },
+                        label = { Text("内容字段") },
+                        placeholder = { Text(text = "e.g., content or description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = imageUrlField,
+                        onValueChange = { imageUrlField = it },
+                        label = { Text("图片 URL 字段 (可选)") },
+                        placeholder = { Text(text = "e.g., image_url or media:thumbnail_url") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = categoryIdField,
+                        onValueChange = { categoryIdField = it },
+                        label = { Text("分类 ID 字段 (可选)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tagsField,
+                        onValueChange = { tagsField = it },
+                        label = { Text("标签字段 (可选)") },
+                        placeholder = { Text(text = "e.g., tags or categories (if a list)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = sourceUrlField_mapping,
+                        onValueChange = { sourceUrlField_mapping = it },
+                        label = { Text("原文链接字段 (可选)") },
+                        placeholder = { Text(text = "Article's own URL, if different") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
@@ -189,7 +323,7 @@ fun EditSubScriptsScreen(
 
             // API Key
             OutlinedTextField(
-                value = apiKey.toString(),
+                value = apiKey ?: "",
                 onValueChange = { apiKey = it },
                 label = { Text("API Key (可选)") },
                 modifier = Modifier.fillMaxWidth()
@@ -197,230 +331,16 @@ fun EditSubScriptsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Items表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableItemsMapping,
-                            onCheckedChange = {
-                                enableItemsMapping = it
-                                if (enableItemsMapping){
-                                    itemsState = 1
-                                    itemsConfig = itemsObject.toString()
-                                } else {
-                                    itemsState = 0
-                                    itemsConfig = EMPTY_CONFIG
-                                }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableItemsMapping) {
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = itemsObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = itemsObject.getString(key)
-                            }
-                        }
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = itemsObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-
-                        Text(
-                            text = "Items表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: itemsObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        itemsObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        itemsConfig = itemsObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                    } else {
-                        Text(
-                            text = "Items表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-
-                    // 启用/禁用开关
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Categories表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableCategoriesMapping,
-                            onCheckedChange = {
-                                enableCategoriesMapping = it
-                                if (enableCategoriesMapping){
-                                    categoriesState = 1
-                                    categoriesConfig = CATEGORY_CONFIG
-                                } else {
-                                    categoriesState = 0
-                                    categoriesConfig = EMPTY_CONFIG
-                                }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableCategoriesMapping) {
-
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = categoriesObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = categoriesObject.getString(key)
-                            }
-                        }
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = categoriesObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-
-                        Text(
-                            text = "Categories表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: categoriesObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        categoriesObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        categoriesConfig = categoriesObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    } else {
-                        Text(
-                            text = "Categories表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-
-
 
             // 保存按钮
             Button(
                 onClick = {
-                    mappingConfig = """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("更新配置")
-            }
-            // 映射配置
-            OutlinedTextField(
-                value = mappingConfig.toString(),
-                onValueChange = { mappingConfig = it },
-                label = { Text("映射配置 (JSON格式)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                placeholder = { Text("请输入JSON格式的映射配置") },
-                readOnly = false
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 保存按钮
-            Button(
-                onClick = {
-                    // 创建当前编辑的userScripts对象
+                    // mappingConfig is updated by LaunchedEffect
                     val testSubScripts = SubScripts(
                         id = scriptId,
-                        name = name.toString(),
+                        name = name ?: "",
                         apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
+                        mappingConfig = mappingConfig,
                         databaseName = databaseName.takeIf { it?.isNotEmpty() == true }
                     )
                     n8nPost(testSubScripts, snackBarHostState)
@@ -433,19 +353,19 @@ fun EditSubScriptsScreen(
             // 保存按钮
             Button(
                 onClick = {
-                    // 创建当前编辑的UserScripts对象
+                    // mappingConfig is updated by LaunchedEffect
                     val testSubScripts = SubScripts(
                         id = scriptId,
-                        name = name.toString(),
+                        name = name ?: "",
                         apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
+                        mappingConfig = mappingConfig,
                         databaseName = databaseName.takeIf { it?.isNotEmpty() == true },
                         isTyped = isTyped
                     )
-                    
+
                     // 创建ScriptsDataHelper实例，使用指定的数据库名称或默认数据库
                     val articlesScriptsDataHelper = ArticlesScriptsDataHelper(context, testSubScripts.databaseName ?: "sub-scripts.db", scriptId)
-                    
+
                     // 调用测试数据函数
                     testApiAndMapping(testSubScripts, articlesScriptsDataHelper, snackBarHostState)
                 },
@@ -459,12 +379,12 @@ fun EditSubScriptsScreen(
             // 保存按钮
             Button(
                 onClick = {
-                    // 更新UserScripts对象
+                    // mappingConfig is updated by LaunchedEffect
                     val updateSubScripts = SubScripts(
                         id = scriptId,
-                        name = name.toString(),
+                        name = name ?: "",
                         apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
+                        mappingConfig = mappingConfig,
                         databaseName = databaseName.takeIf { it?.isNotEmpty() == true },
                         isTyped = isTyped
                     )
@@ -496,91 +416,135 @@ private fun testApiAndMapping(subScripts: SubScripts, articlesScriptsDataHelper:
     coroutineScope.launch {
         try {
             // 解析映射配置JSON
-            val configObject = JSONObject(subScripts.mappingConfig)
-            val itemsState = configObject.optInt("itemsState", 0)
-            
-            // 检查Items映射配置是否启用
-            if (itemsState != 1 || !configObject.has("itemsMapping")) {
-                snackBarHostState.showSnackbar("错误：Items表映射未启用或配置不正确")
+            val configObject = try { JSONObject(subScripts.mappingConfig ?: "{}") } catch (e: JSONException) { JSONObject() }
+            val sourceUrlValue = configObject.optString("sourceUrl", "")
+            val itemsMapping = configObject.optJSONObject("itemsMapping")
+
+            if (sourceUrlValue.isBlank()) {
+                snackBarHostState.showSnackbar("错误：源 URL未设置。")
                 return@launch
             }
-            
-            // 获取Items映射配置
-            val itemsObject = configObject.getJSONObject("itemsMapping")
+            if (itemsMapping == null) {
+                snackBarHostState.showSnackbar("错误：Items Mapping配置未找到。")
+                return@launch
+            }
 
-            val itemsMapping = ArticlesMappingConfig.ItemsMapping(
-                rootPath = itemsObject.getString("rootPath"),
-                idField = itemsObject.getString("idField"),
-                titleField = itemsObject.getString("titleField"),
-                picField = if (itemsObject.has("picField")) itemsObject.getString("picField") else null,
-                contentField = if (itemsObject.has("contentField")) itemsObject.getString("contentField") else null,
-                categoryIdField = if (itemsObject.has("categoryIdField")) itemsObject.getString("categoryIdField") else null,
-                tagsField = if (itemsObject.has("tagsField")) itemsObject.getString("tagsField") else null,
-                urlTypeField = itemsObject.getInt("urlTypeField"),
-                apiUrlField = itemsObject.getString("apiUrlField")
+            val itemsMappingJson = configObject.optJSONObject("itemsMapping")
+
+            if (sourceUrlValue.isBlank()) {
+                snackBarHostState.showSnackbar("Test failed: Source URL is not set.")
+                return@launch
+            }
+            if (itemsMappingJson == null) {
+                snackBarHostState.showSnackbar("Test failed: Items Mapping configuration is missing.")
+                return@launch
+            }
+
+            // Create ItemsMapping instance
+            val itemsMappingInstance = ArticlesMappingConfig.ItemsMapping(
+                rootPath = itemsMappingJson.optString("rootPath"),
+                idField = itemsMappingJson.optString("idField"),
+                titleField = itemsMappingJson.optString("titleField"),
+                picField = itemsMappingJson.optString("picField", null),
+                contentField = itemsMappingJson.optString("contentField", null),
+                categoryIdField = itemsMappingJson.optString("categoryIdField", null),
+                tagsField = itemsMappingJson.optString("tagsField", null),
+                sourceUrlField = itemsMappingJson.optString("sourceUrlField", null),
+                // urlTypeField is not currently set by the UI, default to 0 or handle as needed
+                urlTypeField = itemsMappingJson.optInt("urlTypeField", 0), 
+                apiUrlField = itemsMappingJson.optString("apiUrlField", sourceUrlValue) // Ensure apiUrlField is present
             )
-
-            if (itemsMapping.apiUrlField.isBlank() || itemsMapping.apiUrlField == "http://") {
-                snackBarHostState.showSnackbar("错误：API URL未设置")
+            
+            if (itemsMappingInstance.rootPath.isBlank() || itemsMappingInstance.idField.isBlank() || itemsMappingInstance.titleField.isBlank()){
+                 snackBarHostState.showSnackbar("Test failed: Essential mapping fields (Root Path, ID Field, Title Field) are not set.")
                 return@launch
             }
-            
-            // 创建解析器
-            val parser = ArticlesScriptParser()
 
-            // 在IO线程中执行网络请求
-            val apiResponse = withContext(Dispatchers.IO) {
-                try {
-                    // 构建URL，添加API Key（如果有）
-                    val finalUrlString = if (subScripts.apiKey != null) {
-                        "${itemsMapping.apiUrlField}?api_key=${subScripts.apiKey}"
-                    } else {
-                        itemsMapping.apiUrlField
-                    }
-                    
-                    // 发起网络请求
-                    val connection = URL(finalUrlString).openConnection()
-                    connection.connectTimeout = 5000
-                    connection.readTimeout = 5000
-                    connection.connect()
-                    
-                    // 读取响应
-                    connection.getInputStream().bufferedReader().use { it.readText() }
-                } catch (e: Exception) {
-                    throw Exception("网络请求失败: ${e.message}")
+
+            // Network Request
+            val apiResponse: String
+            try {
+                val finalUrlString = if (subScripts.apiKey?.isNotBlank() == true) {
+                    "${sourceUrlValue}?api_key=${subScripts.apiKey}"
+                } else {
+                    sourceUrlValue
                 }
+                val url = URL(finalUrlString)
+                val connection = url.openConnection()
+                connection.connectTimeout = 5000 // 5 seconds
+                connection.readTimeout = 10000  // 10 seconds
+                apiResponse = connection.getInputStream().bufferedReader().use { it.readText() }
+            } catch (e: java.net.MalformedURLException) {
+                snackBarHostState.showSnackbar("Test failed: Invalid URL format: $sourceUrlValue")
+                return@launch
+            } catch (e: java.io.IOException) {
+                snackBarHostState.showSnackbar("Test failed: Network request error (e.g., no internet, server down).")
+                Log.e("testApiAndMapping", "IOException: ${e.message}", e)
+                return@launch
+            } catch (e: Exception) {
+                snackBarHostState.showSnackbar("Test failed: Network request failed: ${e.message}")
+                Log.e("testApiAndMapping", "Generic network exception: ${e.message}", e)
+                return@launch
             }
 
-            // 解析数据并保存到数据库
-            val itemsCount = withContext(Dispatchers.IO) {
-                try {
-                    // 解析并保存items
-                    val items = parser.parseArticlesItems(apiResponse, itemsMapping, subScripts.id)
-                    var count = 0
+            // Parsing
+            val items: List<ArticlesItems>
+            try {
+                val parser = ArticlesScriptParser()
+                items = parser.parseArticlesItems(apiResponse, itemsMappingInstance, subScripts.id)
+            } catch (e: JSONException) {
+                snackBarHostState.showSnackbar("Test failed: Could not parse JSON response. Check data format and 'Article Root Path'.")
+                Log.e("testApiAndMapping", "JSONException: ${e.message}", e)
+                return@launch
+            } catch (e: Exception) {
+                snackBarHostState.showSnackbar("Test failed: Data parsing error: ${e.message}")
+                Log.e("testApiAndMapping", "Generic parsing exception: ${e.message}", e)
+                return@launch
+            }
+
+            // Validation of Parsed Data
+            if (items.isEmpty()) {
+                snackBarHostState.showSnackbar("Test successful, but no articles found. Verify 'Article Root Path' and other mapping fields.")
+                return@launch
+            }
+
+            val firstItem = items.first()
+            if (firstItem.id.isBlank() || firstItem.title.isBlank()) {
+                snackBarHostState.showSnackbar("Warning: Articles parsed, but the first item is missing ID or Title. Check 'ID Field' and 'Title Field' mappings.")
+                // Optionally, still proceed to save if some data is present but partial
+            }
+            
+            // Data Storage
+            var count = 0
+            try {
+                withContext(Dispatchers.IO) {
                     for (item in items) {
                         articlesScriptsDataHelper.insertOrUpdateItem(item)
                         count++
                     }
-                    count
-                } catch (e: Exception) {
-                    throw Exception("数据解析或保存失败: ${e.message}")
                 }
+            } catch (e: Exception) {
+                 snackBarHostState.showSnackbar("Error saving articles to database: ${e.message}")
+                Log.e("testApiAndMapping", "Database save error: ${e.message}", e)
+                return@launch
             }
 
-            // 显示成功消息
-            snackBarHostState.showSnackbar("测试成功：成功获取并保存 $itemsCount 条数据")
+            snackBarHostState.showSnackbar("Test successful! Fetched and saved $count articles.")
+
         } catch (e: Exception) {
-            // 处理错误
+            // Catch-all for unexpected errors during the setup (e.g., JSON parsing of mappingConfig itself)
             e.printStackTrace()
-            snackBarHostState.showSnackbar("测试失败：${e.message}")
+            snackBarHostState.showSnackbar("Test failed: An unexpected error occurred: ${e.message}")
+            Log.e("testApiAndMapping", "Outer catch-all: ${e.message}", e)
         }
     }
 }
 
 
 /**
- * 测试API和映射配置是否能正常获取数据并写入数据库
- * @param SubScripts API配置
+ * n8nPost function now primarily sends the simplified mappingConfig.
+ * The actual usefulness of this for n8n will depend on how n8n is set up to handle this new structure.
+ * @param SubScripts API配置 (contains the simplified mappingConfig)
  * @param snackBarHostState 用于显示消息的SnackbarHostState
  */
 private fun n8nPost(subScripts: SubScripts, snackBarHostState: SnackbarHostState) {
@@ -589,12 +553,13 @@ private fun n8nPost(subScripts: SubScripts, snackBarHostState: SnackbarHostState
 
     coroutineScope.launch {
         try {
-
+            val configJson = subScripts.mappingConfig ?: "{}"
             // 在IO线程中执行网络请求
             val apiResponse = withContext(Dispatchers.IO) {
                 try {
-                    // 发起网络请求
-                    val connection = URL("https://n8n.66log.com/webhook-test/ai?data=${subScripts.mappingConfig}").openConnection()
+                    // 发起网络请求 - Ensure mappingConfig is URL encoded if it contains special characters
+                    val encodedMappingConfig = java.net.URLEncoder.encode(configJson, "UTF-8")
+                    val connection = URL("https://n8n.66log.com/webhook-test/ai?data=$encodedMappingConfig").openConnection()
                     connection.connectTimeout = 5000
                     connection.readTimeout = 5000
                     connection.connect()
@@ -606,19 +571,13 @@ private fun n8nPost(subScripts: SubScripts, snackBarHostState: SnackbarHostState
                 }
             }
 
-            // 解析数据并保存到数据库
-            withContext(Dispatchers.IO) {
-                try {
-                    snackBarHostState.showSnackbar("测试成功：$apiResponse")
-                } catch (e: Exception) {
-                    throw Exception("数据解析或保存失败: ${e.message}")
-                }
-            }
+            // 显示成功消息
+            snackBarHostState.showSnackbar("N8N交互响应: $apiResponse")
 
         } catch (e: Exception) {
             // 处理错误
             e.printStackTrace()
-            snackBarHostState.showSnackbar("测试失败：${e.message}")
+            snackBarHostState.showSnackbar("N8N交互失败：${e.message}")
         }
     }
 }

@@ -69,23 +69,46 @@ fun AddSubScriptsScreen(
     var name by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var databaseName by remember { mutableStateOf("") }
+    var sourceUrl by remember { mutableStateOf("") }
+    var selectedFeedType by remember { mutableStateOf("JSON") } // Default to JSON
 
-    //val configList = listOf("Items表映射", "Categories表映射")
+    // State variables for new mapping fields
+    var articleRootPath by remember { mutableStateOf("") }
+    var idField by remember { mutableStateOf("") }
+    var titleField by remember { mutableStateOf("") }
+    var contentField by remember { mutableStateOf("") }
+    var imageUrlField by remember { mutableStateOf("") } // Optional
+    var categoryIdField by remember { mutableStateOf("") } // Optional
+    var tagsField by remember { mutableStateOf("") } // Optional
+    var sourceUrlField_mapping by remember { mutableStateOf("") } // Optional
 
-    var itemsConfig by remember { mutableStateOf("{}") }
-    var categoriesConfig by remember { mutableStateOf("{}") }
-    val itemsMappingConfig = ITEM_CONFIG
-    var categoriesMappingConfig = CATEGORY_CONFIG
+    var mappingConfig by remember { mutableStateOf("{}") }
 
+    // Update mappingConfig whenever sourceUrl, feedType or any mapping field changes
+    LaunchedEffect(
+        sourceUrl, selectedFeedType, articleRootPath, idField, titleField, contentField,
+        imageUrlField, categoryIdField, tagsField, sourceUrlField_mapping
+    ) {
+        val itemsMappingObject = JSONObject()
+        itemsMappingObject.put("rootPath", articleRootPath)
+        itemsMappingObject.put("idField", idField)
+        itemsMappingObject.put("titleField", titleField)
+        itemsMappingObject.put("contentField", contentField)
+        if (imageUrlField.isNotBlank()) itemsMappingObject.put("picField", imageUrlField)
+        if (categoryIdField.isNotBlank()) itemsMappingObject.put("categoryIdField", categoryIdField)
+        if (tagsField.isNotBlank()) itemsMappingObject.put("tagsField", tagsField)
+        if (sourceUrlField_mapping.isNotBlank()) itemsMappingObject.put("sourceUrlField", sourceUrlField_mapping)
+        itemsMappingObject.put("apiUrlField", sourceUrl) // Populate apiUrlField with sourceUrl
 
-    var itemsState by remember {mutableIntStateOf(0)}
-    var categoriesState by remember {mutableIntStateOf(0)}
-    var enableItemsMapping by remember { mutableStateOf(false) }
-    var enableCategoriesMapping by remember { mutableStateOf(false) }
-    var mappingConfig by remember { mutableStateOf(
-        """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-    ) }
+        val mainConfigObject = JSONObject()
+        mainConfigObject.put("sourceUrl", sourceUrl)
+        mainConfigObject.put("feedType", selectedFeedType) // Add feedType to mappingConfig
+        mainConfigObject.put("itemsMapping", itemsMappingObject)
+        // categoriesMapping can be added here if needed in the future
+        // mainConfigObject.put("categoriesMapping", JSONObject()) // Example for empty categories mapping
 
+        mappingConfig = mainConfigObject.toString()
+    }
 
     var isTyped by remember {
         mutableIntStateOf(ContentType.NEWS.typeId)
@@ -152,6 +175,111 @@ fun AddSubScriptsScreen(
                 label = { Text("API名称") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Add Source URL field
+            OutlinedTextField(
+                value = sourceUrl,
+                onValueChange = { sourceUrl = it },
+                label = { Text("源 URL") },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("请输入以 http:// 或 https:// 开头的有效URL") }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Feed Type Selection
+            Text("选择数据源类型:", style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val feedTypes = listOf("JSON", "RSS/XML") // Define feed types
+                feedTypes.forEach { type ->
+                    FilterChip(
+                        selected = selectedFeedType == type,
+                        onClick = { selectedFeedType = type },
+                        label = { Text(type) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Field Mapping Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("字段映射 (Items Mapping)", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = articleRootPath,
+                        onValueChange = { articleRootPath = it },
+                        label = { Text("文章根路径") },
+                        placeholder = { Text(text = "e.g., data.items or feed.entry") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = idField,
+                        onValueChange = { idField = it },
+                        label = { Text("ID 字段") },
+                        placeholder = { Text(text = "e.g., id or guid") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = titleField,
+                        onValueChange = { titleField = it },
+                        label = { Text("标题字段") },
+                        placeholder = { Text(text = "e.g., title or name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = contentField,
+                        onValueChange = { contentField = it },
+                        label = { Text("内容字段") },
+                        placeholder = { Text(text = "e.g., content or description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = imageUrlField,
+                        onValueChange = { imageUrlField = it },
+                        label = { Text("图片 URL 字段 (可选)") },
+                        placeholder = { Text(text = "e.g., image_url or media:thumbnail_url") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = categoryIdField,
+                        onValueChange = { categoryIdField = it },
+                        label = { Text("分类 ID 字段 (可选)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = tagsField,
+                        onValueChange = { tagsField = it },
+                        label = { Text("标签字段 (可选)") },
+                        placeholder = { Text(text = "e.g., tags or categories (if a list)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = sourceUrlField_mapping,
+                        onValueChange = { sourceUrlField_mapping = it },
+                        label = { Text("原文链接字段 (可选)") },
+                        placeholder = { Text(text = "Article's own URL, if different") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -238,238 +366,15 @@ fun AddSubScriptsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Items表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableItemsMapping,
-                            onCheckedChange = {
-                                enableItemsMapping = it
-                                enableItemsMapping = it
-                                if (enableItemsMapping){
-                                    itemsState = 1
-                                    itemsConfig = itemsMappingConfig
-                                } else {
-                                    itemsState = 0
-                                    itemsConfig = EMPTY_CONFIG
-                                }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableItemsMapping) {
-                        Text(
-                            text = "Items表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        val itemsObject = remember { JSONObject(itemsConfig) }
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = itemsObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = itemsObject.getString(key)
-                            }
-                        }
-
-                        // 显示所有字段的输入框
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = itemsObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: itemsObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        itemsObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        itemsConfig = itemsObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    } else {
-                        Text(
-                            text = "Items表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-
-                    // 启用/禁用开关
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Categories表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableCategoriesMapping,
-                            onCheckedChange = {
-                                enableCategoriesMapping = it
-                                if (enableCategoriesMapping){
-                                    categoriesState = 1
-                                    categoriesConfig = categoriesMappingConfig
-                                } else {
-                                    categoriesState = 0
-                                    categoriesConfig = EMPTY_CONFIG
-                                }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableCategoriesMapping) {
-
-
-                        val categoriesObject = remember { JSONObject(categoriesConfig) }
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = categoriesObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = categoriesObject.getString(key)
-                            }
-                        }
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = categoriesObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-
-                        Text(
-                            text = "Categories表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: categoriesObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        categoriesObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        categoriesConfig = categoriesObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    } else {
-                        Text(
-                            text = "Categories表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-
-
-
-
 
             // 保存按钮
             Button(
                 onClick = {
-                    mappingConfig = """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("更新配置")
-            }
-
-
-
-            // 映射配置
-            OutlinedTextField(
-                value = mappingConfig,
-                onValueChange = { mappingConfig = it },
-                label = { Text("映射配置 (JSON格式)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                placeholder = { Text("请输入JSON格式的映射配置") },
-                readOnly = false
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-
-
-            // 保存按钮
-            Button(
-                onClick = {
-                    // 创建ApiConfig对象
+                    // mappingConfig is already updated by LaunchedEffect
                     val subScripts = SubScripts(
                         name = name,
                         apiKey = apiKey.takeIf { it.isNotEmpty() },
-                        mappingConfig = mappingConfig.toString(),
+                        mappingConfig = mappingConfig,
                         databaseName = databaseName.takeIf { it.isNotEmpty() },
                         createdBy = viewModel.getCurrentUser()?.name,
                         isTyped = isTyped
