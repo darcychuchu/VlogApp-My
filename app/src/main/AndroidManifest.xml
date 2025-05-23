@@ -39,6 +39,8 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <service android:name=".playback.MusicPlaybackService" />
     </application>
 
 </manifest>

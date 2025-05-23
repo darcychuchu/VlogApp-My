@@ -43,7 +43,8 @@ fun SubScriptsItem(
     onFetchDataClick: (SubScripts) -> Unit,
     onWorkClick: (SubScripts) -> Unit,
     onLogoEditClick: (SubScripts) -> Unit,
-    onPublishClick: (SubScripts) -> Unit
+    onPublishClick: (SubScripts) -> Unit,
+    onManageTracksClick: (SubScripts) -> Unit // Added callback
 ) {
     Card(
         modifier = Modifier
@@ -122,8 +123,13 @@ fun SubScriptsItem(
             }
 
             // 显示关联的数据库名称
+            val databaseDisplayName = if (subScripts.isTyped == ContentType.MUSIC.typeId) {
+                if (subScripts.databaseName.isNullOrBlank()) "默认数据库" else subScripts.databaseName
+            } else {
+                if (subScripts.databaseName.isNullOrBlank()) "默认数据库" else "${subScripts.databaseName}.db"
+            }
             Text(
-                text = "数据库: ${if (subScripts.databaseName.isNullOrBlank()) "默认数据库" else "${subScripts.databaseName}.db"}",
+                text = "数据库: $databaseDisplayName",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -214,7 +220,13 @@ fun SubScriptsItem(
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { onFetchDataClick(subScripts) },
+                        .clickable {
+                            if (subScripts.isTyped == ContentType.MUSIC.typeId) {
+                                onManageTracksClick(subScripts)
+                            } else {
+                                onFetchDataClick(subScripts)
+                            }
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(

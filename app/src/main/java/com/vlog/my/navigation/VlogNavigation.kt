@@ -96,6 +96,9 @@ sealed class Screen(val route: String) {
         fun createRoute(): String = "download_app"
     }
 
+    object MusicTracks : Screen("music_tracks/{subScriptId}/{musicDatabaseName}") {
+        fun createRoute(subScriptId: String, musicDatabaseName: String): String = "music_tracks/$subScriptId/$musicDatabaseName"
+    }
 }
 
 @Composable
@@ -296,6 +299,21 @@ val localDataHelper = remember {
 //                )
             }
 
+            composable(
+                route = Screen.MusicTracks.route,
+                arguments = listOf(
+                    navArgument("subScriptId") { type = NavType.StringType },
+                    navArgument("musicDatabaseName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val subScriptId = backStackEntry.arguments?.getString("subScriptId") ?: ""
+                val musicDatabaseName = backStackEntry.arguments?.getString("musicDatabaseName") ?: ""
+                com.vlog.my.screens.subscripts.music.MusicTracksScreen(
+                    navController = navController,
+                    subScriptId = subScriptId,
+                    musicDatabaseName = musicDatabaseName
+                )
+            }
         }
     }
 }

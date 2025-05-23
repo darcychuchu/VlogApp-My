@@ -6,12 +6,16 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import com.vlog.my.data.model.Workers
+import com.vlog.my.data.scripts.music.MusicScriptDataHelper
+import java.io.File
 import java.util.UUID
 import androidx.core.database.sqlite.transaction
 
 class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE_NAME) : SQLiteOpenHelper(context, databaseName, null, DATABASE_VERSION) {
 
     companion object {
+        // Assuming ContentType.MUSIC.typeId is 2 as per instructions
+        private const val CONTENT_TYPE_MUSIC_TYPE_ID = 2
         private const val DATABASE_NAME = "sub-scripts-database.db"
         private const val DATABASE_VERSION = 1
 
@@ -135,7 +139,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             userScriptRow.logoUrl?.let { put(COLUMN_LOGO_URL, it) }
             put(COLUMN_API_KEY, userScriptRow.apiKey)
             put(COLUMN_MAPPING_CONFIG, userScriptRow.mappingConfig)
-            userScriptRow.databaseName?.let { put(COLUMN_DATABASE_NAME, it) }
+            // userScriptRow.databaseName?.let { put(COLUMN_DATABASE_NAME, it) } // Modified below
             put(COLUMN_IS_TYPED, userScriptRow.isTyped)
             put(COLUMN_IS_LOCKED, userScriptRow.isLocked)
             put(COLUMN_IS_ENABLED, userScriptRow.isEnabled)
@@ -144,6 +148,20 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_VERSION, userScriptRow.version)
             put(COLUMN_CREATED_BY, userScriptRow.createdBy)
         }
+
+        if (userScriptRow.isTyped == CONTENT_TYPE_MUSIC_TYPE_ID) {
+            val musicDbName = "music_script_${UUID.randomUUID()}.db"
+            values.put(COLUMN_DATABASE_NAME, musicDbName)
+            // Create the music database file
+            val musicHelper = MusicScriptDataHelper(context, musicDbName)
+            musicHelper.writableDatabase.close() // This ensures the db file is created
+            userScriptRow.databaseName = musicDbName // Update the object in memory
+            Log.d("SubScriptsDataHelper", "Created music database: $musicDbName")
+        } else {
+            // For other types, use the provided databaseName or null
+            userScriptRow.databaseName?.let { values.put(COLUMN_DATABASE_NAME, it) }
+        }
+
         return db.insert(TABLE_SUB_SCRIPTS, null, values)
     }
     
@@ -241,6 +259,24 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
     
     fun deleteUserScripts(id: String): Int {
         val db = writableDatabase
+        val subScript = getUserScriptsById(id)
+
+        if (subScript != null && subScript.isTyped == CONTENT_TYPE_MUSIC_TYPE_ID && !subScript.databaseName.isNullOrEmpty()) {
+            try {
+                val dbFile = context.getDatabasePath(subScript.databaseName)
+                if (dbFile.exists()) {
+                    if (dbFile.delete()) {
+                        Log.i("SubScriptsDataHelper", "Successfully deleted music database: ${subScript.databaseName}")
+                    } else {
+                        Log.e("SubScriptsDataHelper", "Failed to delete music database: ${subScript.databaseName}")
+                    }
+                } else {
+                    Log.w("SubScriptsDataHelper", "Music database file not found, skipping deletion: ${subScript.databaseName}")
+                }
+            } catch (e: Exception) {
+                Log.e("SubScriptsDataHelper", "Error deleting music database ${subScript.databaseName}: ${e.message}")
+            }
+        }
         return db.delete(TABLE_SUB_SCRIPTS, "$COLUMN_ID = ?", arrayOf(id))
     }
     
