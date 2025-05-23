@@ -34,11 +34,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.foundation.layout.ColumnScope // Required for ColumnScope.align
+import androidx.compose.material.icons.filled.FileOpen // For select file icon
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.UUID
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -69,6 +78,9 @@ fun AddSubScriptsScreen(
     var name by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var databaseName by remember { mutableStateOf("") }
+    var enableImport by remember { mutableStateOf(false) }
+    var backupFileUri by remember { mutableStateOf<Uri?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     //val configList = listOf("Items表映射", "Categories表映射")
 
@@ -181,15 +193,45 @@ fun AddSubScriptsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Conditional UI for Video type
+            if (isTyped == ContentType.VIDEOS.typeId) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = enableImport,
+                        onCheckedChange = { enableImport = it; if (!it) backupFileUri = null }
+                    )
+                    Text("Import from backup?")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
 
+                if (enableImport) {
+                    val pickFileLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.OpenDocument(),
+                        onResult = { uri -> backupFileUri = uri }
+                    )
+                    Button(onClick = { pickFileLauncher.launch(arrayOf("*/*")) }) { // Consider more specific MIME types
+                        Icon(Icons.Filled.FileOpen, contentDescription = "Select backup file")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Select Backup File (.db)")
+                    }
+                    backupFileUri?.let {
+                        Text("Selected: ${it.path}", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
 
-            // 数据库名称输入框
+            // 数据库名称输入框 - Potentially disable or hide if importing with a fixed name strategy
             OutlinedTextField(
                 value = databaseName,
                 onValueChange = { databaseName = it },
-                label = { Text("数据库名称 (可选)") },
-                placeholder = { Text("留空则使用默认数据库") },
-                modifier = Modifier.fillMaxWidth()
+                label = { Text("Database Name for New Script") },
+                placeholder = { Text(if (enableImport && backupFileUri != null) "Will use a new unique name" else "Leave blank for default name") },
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = enableImport && backupFileUri != null // Example: make read-only if importing
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -465,25 +507,67 @@ fun AddSubScriptsScreen(
             // 保存按钮
             Button(
                 onClick = {
-                    // 创建ApiConfig对象
+                    val newDbNameForScript = if (enableImport && backupFileUri != null) {
+                        // If importing, always generate a new unique DB name for the script's entry
+                        "${UUID.randomUUID()}.db"
+                    } else {
+                        databaseName.takeIf { it.isNotBlank() } ?: "${UUID.randomUUID()}.db"
+                    }
+
                     val subScripts = SubScripts(
                         name = name,
                         apiKey = apiKey.takeIf { it.isNotEmpty() },
-                        mappingConfig = mappingConfig.toString(),
-                        databaseName = databaseName.takeIf { it.isNotEmpty() },
+                        mappingConfig = mappingConfig, // Ensure this is up-to-date
+                        databaseName = newDbNameForScript, // Use the determined DB name
                         createdBy = viewModel.getCurrentUser()?.name,
-                        isTyped = isTyped
+                        isTyped = isTyped,
+                        // scriptPasswordHash will be null initially, user sets it later if importing or new
                     )
 
-                    // 保存到数据库
-                    scriptsDataHelper.insertUserScripts(subScripts)
+                    val insertedId = scriptsDataHelper.insertUserScripts(subScripts)
 
-                    // 返回上一页
-                    navController?.popBackStack()
+                    if (insertedId > -1) {
+                        if (enableImport && backupFileUri != null) {
+                            coroutineScope.launch {
+                                try {
+                                    val targetFile = context.getDatabasePath(newDbNameForScript)
+                                    if (targetFile.exists()) {
+                                        targetFile.delete() // Delete empty DB created by helper if it exists
+                                    }
+                                    targetFile.parentFile?.mkdirs()
+
+                                    val inputStream = context.contentResolver.openInputStream(backupFileUri!!)
+                                    val outputStream = FileOutputStream(targetFile)
+                                    inputStream?.use { input ->
+                                        outputStream.use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    }
+                                    Log.d("AddSubScriptsScreen", "Backup DB copied to ${targetFile.absolutePath}")
+                                    snackBarHostState.showSnackbar("Script and backup imported successfully!")
+                                    navController?.popBackStack()
+                                } catch (e: Exception) {
+                                    Log.e("AddSubScriptsScreen", "Error importing backup DB", e)
+                                    snackBarHostState.showSnackbar("Error importing backup: ${e.message}")
+                                    // Optionally, delete the SubScripts entry if import fails critically
+                                    // scriptsDataHelper.deleteUserScripts(subScripts.id) // subScripts.id needs to be retrieved after insert
+                                }
+                            }
+                        } else {
+                            // Standard save without import
+                            snackBarHostState.showSnackbar("Script saved successfully!")
+                            navController?.popBackStack()
+                        }
+                    } else {
+                        coroutineScope.launch {
+                            snackBarHostState.showSnackbar("Failed to save script.")
+                        }
+                    }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = name.isNotBlank() && (!enableImport || backupFileUri != null || isTyped != ContentType.VIDEOS.typeId) // Basic validation
             ) {
-                Text("保存")
+                Text("Save Script")
             }
         }
     }

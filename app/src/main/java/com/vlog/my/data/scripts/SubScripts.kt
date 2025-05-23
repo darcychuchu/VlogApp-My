@@ -34,5 +34,6 @@ data class SubScripts(
 //@field:Json(name = "isLocked") var isLocked: Int = 0,
 //@field:Json(name = "isValued") var isValued: Int = 0,
 //@field:Json(name = "version") var version: Int = 0,
-//@field:Json(name = "createdBy") var createdBy: String? = null
+//@field:Json(name = "createdBy") var createdBy: String? = null,
+    var scriptPasswordHash: String? = null // Stores salt:hash for password protection
 )

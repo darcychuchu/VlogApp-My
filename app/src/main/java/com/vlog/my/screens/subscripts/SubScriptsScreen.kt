@@ -37,6 +37,7 @@ import androidx.navigation.NavController
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.vlog.my.data.scripts.ContentType // Added import
 import com.vlog.my.data.scripts.SubScriptsDataHelper
 import com.vlog.my.data.scripts.SubScripts
 import com.vlog.my.navigation.Screen
@@ -46,6 +47,9 @@ import com.vlog.my.screens.subscripts.components.PublishScriptDialog
 import com.vlog.my.screens.users.UserViewModel
 import com.vlog.my.data.bazaar.BazaarScriptsRepository
 import com.vlog.my.screens.bazaar.BazaarScriptsViewModel
+import com.vlog.my.screens.videos.components.PasswordDialogMode
+import com.vlog.my.screens.videos.components.PasswordPromptDialog
+import com.vlog.my.utils.PasswordUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,9 +73,15 @@ fun SubScriptsScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showLogoEditDialog by remember { mutableStateOf(false) }
     var showPublishDialog by remember { mutableStateOf(false) }
-    var selectedSubScripts by remember { mutableStateOf<SubScripts?>(null) }
+    var selectedSubScriptsForDeletion by remember { mutableStateOf<SubScripts?>(null) } // Renamed for clarity
     var selectedLogoSubScripts by remember { mutableStateOf<SubScripts?>(null) }
     var selectedPublishSubScripts by remember { mutableStateOf<SubScripts?>(null) }
+
+    // States for Password Dialog
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var currentScriptForPassword by remember { mutableStateOf<SubScripts?>(null) }
+    var passwordDialogMode by remember { mutableStateOf(PasswordDialogMode.ENTER_PASSWORD) }
+    var passwordErrorMessage by remember { mutableStateOf<String?>(null) }
     
 //    // 获取数据库路径
 //    val articlesScriptsDataHelper = remember { ArticlesScriptsDataHelper(context) }
@@ -82,34 +92,69 @@ fun SubScriptsScreen(
         userScriptList = scriptsDataHelper.getAllUserScripts()
     }
 
-    // 删除确认对话框
-    if (showDeleteDialog && selectedSubScripts != null) {
+    // Delete confirmation dialog
+    if (showDeleteDialog && selectedSubScriptsForDeletion != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("确认删除") },
-            text = { Text("确定要删除API配置 '${selectedSubScripts?.name} - ${selectedSubScripts?.id}' 吗？") },
+            title = { Text("Confirm Delete") },
+            text = { Text("Are you sure you want to delete API config '${selectedSubScriptsForDeletion?.name} - ${selectedSubScriptsForDeletion?.id}'?") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        selectedSubScripts?.id?.let { scriptsDataHelper.deleteUserScripts(it) }
-                        userScriptList = scriptsDataHelper.getAllUserScripts()
+                        selectedSubScriptsForDeletion?.id?.let { scriptsDataHelper.deleteUserScripts(it) }
+                        userScriptList = scriptsDataHelper.getAllUserScripts() // Refresh list
                         showDeleteDialog = false
+                        selectedSubScriptsForDeletion = null
                     }
-                ) {
-                    Text("确定")
-                }
+                ) { Text("Confirm") }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { showDeleteDialog = false }
-                ) {
-                    Text("取消")
-                }
+                TextButton(onClick = { showDeleteDialog = false; selectedSubScriptsForDeletion = null }) { Text("Cancel") }
             }
         )
     }
 
-    // Logo编辑对话框
+    // Password Prompt Dialog
+    if (showPasswordDialog && currentScriptForPassword != null) {
+        PasswordPromptDialog(
+            mode = passwordDialogMode,
+            onDismiss = {
+                showPasswordDialog = false
+                currentScriptForPassword = null
+                passwordErrorMessage = null
+            },
+            onPasswordSet = { password ->
+                // This is for SET_PASSWORD mode
+                currentScriptForPassword?.let { script ->
+                    val storedPasswordHash = PasswordUtils.generateStoredPassword(password)
+                    val success = scriptsDataHelper.updateScriptPasswordHash(script.id!!, storedPasswordHash)
+                    if (success > 0) {
+                        // Update in-memory list as well, or refetch
+                        userScriptList = scriptsDataHelper.getAllUserScripts()
+                        showPasswordDialog = false
+                        navController?.navigate(Screen.VideoList.createRoute(script.id!!, script.databaseName!!))
+                    } else {
+                        passwordErrorMessage = "Failed to set password. Please try again."
+                    }
+                }
+            },
+            onPasswordEntered = { password ->
+                // This is for ENTER_PASSWORD mode
+                currentScriptForPassword?.let { script ->
+                    val storedHash = script.scriptPasswordHash // Fetched earlier
+                    if (PasswordUtils.verifyPassword(password, storedHash)) {
+                        showPasswordDialog = false
+                        navController?.navigate(Screen.VideoList.createRoute(script.id!!, script.databaseName!!))
+                    } else {
+                        passwordErrorMessage = "Incorrect password. Please try again."
+                    }
+                }
+            },
+            errorMessage = passwordErrorMessage
+        )
+    }
+    
+    // Logo edit dialog
     if (showLogoEditDialog && selectedLogoSubScripts != null) {
         ScriptsLogoEditDialog(
             subScripts = selectedLogoSubScripts!!,
@@ -243,11 +288,29 @@ fun SubScriptsScreen(
                                 navController?.navigate("script_edit/${userScripts.id}")
                             },
                             onDeleteClick = {
-                                selectedSubScripts = userScripts
+                                selectedSubScriptsForDeletion = userScripts // Use the renamed state var
                                 showDeleteDialog = true
                             },
-                            onFetchDataClick = {
-                                navController?.navigate("item_list/${userScripts.id}")
+                            onFetchDataClick = { clickedUserScript ->
+                                if (clickedUserScript.contentType == ContentType.VIDEOS.typeId) {
+                                    // Fetch the full script details to get the latest password hash
+                                    val fullScriptDetails = clickedUserScript.id?.let { scriptsDataHelper.getUserScriptsById(it) }
+                                    if (fullScriptDetails?.databaseName == null) {
+                                         println("Error: Database name is null for script ${fullScriptDetails?.id}")
+                                        return@onFetchDataClick
+                                    }
+                                    currentScriptForPassword = fullScriptDetails // Store the fetched script
+                                    passwordErrorMessage = null // Clear previous errors
+
+                                    if (fullScriptDetails.scriptPasswordHash.isNullOrEmpty()) {
+                                        passwordDialogMode = PasswordDialogMode.SET_PASSWORD
+                                    } else {
+                                        passwordDialogMode = PasswordDialogMode.ENTER_PASSWORD
+                                    }
+                                    showPasswordDialog = true
+                                } else {
+                                    navController?.navigate("item_list/${clickedUserScript.id}")
+                                }
                             },
                             onWorkClick = { userScripts ->
                                 navController?.navigate(Screen.Workers.createRoute(userScripts.id ?: ""))

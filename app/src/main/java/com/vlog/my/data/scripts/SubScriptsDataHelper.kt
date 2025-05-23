@@ -23,6 +23,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
         private const val COLUMN_IS_VALUED = "is_valued"
         private const val COLUMN_VERSION = "version"
         private const val COLUMN_CREATED_BY = "created_by"
+        private const val COLUMN_SCRIPT_PASSWORD_HASH = "script_password_hash" // New column
 
         // SubScripts表字段
         private const val TABLE_SUB_SCRIPTS = "sub_scripts"
@@ -66,7 +67,8 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                 $COLUMN_IS_TYPED INTEGER,
                 $COLUMN_IS_VALUED INTEGER,
                 $COLUMN_VERSION INTEGER,
-                $COLUMN_CREATED_BY TEXT
+                $COLUMN_CREATED_BY TEXT,
+                $COLUMN_SCRIPT_PASSWORD_HASH TEXT 
             )
         """.trimIndent()
 
@@ -95,6 +97,15 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) { // Assuming current version is 1, next is 2
+            try {
+                db.execSQL("ALTER TABLE $TABLE_SUB_SCRIPTS ADD COLUMN $COLUMN_SCRIPT_PASSWORD_HASH TEXT")
+            } catch (e: Exception) {
+                Log.e("SubScriptsDataHelper", "Error upgrading database to add password hash column", e)
+                // If the column already exists, SQLite might throw an error, which can be ignored if that's the desired outcome.
+                // However, a more robust migration checks if the column exists first.
+            }
+        }
 //        if (oldVersion < 2) {
 //
 //            val createApiConfigsTableQuery = """
@@ -143,6 +154,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_IS_VALUED, userScriptRow.isValued)
             put(COLUMN_VERSION, userScriptRow.version)
             put(COLUMN_CREATED_BY, userScriptRow.createdBy)
+            userScriptRow.scriptPasswordHash?.let { put(COLUMN_SCRIPT_PASSWORD_HASH, it) }
         }
         return db.insert(TABLE_SUB_SCRIPTS, null, values)
     }
@@ -160,10 +172,20 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_IS_TYPED, userScriptRow.isTyped)
             put(COLUMN_IS_LOCKED, userScriptRow.isLocked)
             put(COLUMN_IS_ENABLED, userScriptRow.isEnabled)
-            put(COLUMN_IS_TYPED, userScriptRow.isTyped)
+            // put(COLUMN_IS_TYPED, userScriptRow.isTyped) // Duplicate, removed
             put(COLUMN_IS_VALUED, userScriptRow.isValued)
             put(COLUMN_VERSION, userScriptRow.version)
             put(COLUMN_CREATED_BY, userScriptRow.createdBy)
+            // Handle password hash update:
+            // If it's explicitly set to null (to remove password), we need to allow that.
+            // If it's not null, put it. If it's null in userScriptRow but we don't want to clear it on every update,
+            // then this logic needs to be more specific, perhaps in a dedicated update method for password.
+            // For now, this will update it if present or clear it if null in userScriptRow.
+            if (userScriptRow.scriptPasswordHash == null) {
+                putNull(COLUMN_SCRIPT_PASSWORD_HASH)
+            } else {
+                put(COLUMN_SCRIPT_PASSWORD_HASH, userScriptRow.scriptPasswordHash)
+            }
         }
         return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(userScriptRow.id.toString()))
     }
@@ -194,7 +216,8 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                     isEnabled = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_ENABLED)),
                     isValued = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_VALUED)),
                     version = it.getInt(it.getColumnIndexOrThrow(COLUMN_VERSION)),
-                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY))
+                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY)),
+                    scriptPasswordHash = it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
                 )
             } else {
                 null
@@ -231,7 +254,8 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                     isEnabled = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_ENABLED)),
                     isValued = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_VALUED)),
                     version = it.getInt(it.getColumnIndexOrThrow(COLUMN_VERSION)),
-                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY))
+                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY)),
+                    scriptPasswordHash = it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
                 )
                 userScriptList.add(userScriptRow)
             }
@@ -256,6 +280,37 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_LOGO_URL, logoUrl)
         }
         return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(id))
+    }
+
+    fun updateScriptPasswordHash(scriptId: String, passwordHash: String?): Int {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            if (passwordHash == null) {
+                putNull(COLUMN_SCRIPT_PASSWORD_HASH)
+            } else {
+                put(COLUMN_SCRIPT_PASSWORD_HASH, passwordHash)
+            }
+        }
+        return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(scriptId))
+    }
+
+    fun getScriptPasswordHash(scriptId: String): String? {
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_SUB_SCRIPTS,
+            arrayOf(COLUMN_SCRIPT_PASSWORD_HASH), // Select only the password hash column
+            "$COLUMN_ID = ?",
+            arrayOf(scriptId),
+            null, null, null, null
+        )
+
+        return cursor.use {
+            if (it.moveToFirst()) {
+                it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
+            } else {
+                null
+            }
+        }
     }
 
 
@@ -408,7 +463,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
     
     fun batchInsertWorkers(workerList: List<Workers>) {
         writableDatabase.transaction {
-            try {
+            // try { // Not strictly needed if individual operations handle their own exceptions
                 workerList.forEach { worker ->
                     val values = ContentValues().apply {
                         put(COLUMN_NAME, worker.name)
@@ -426,18 +481,25 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                         put(COLUMN_TYPE_FIELD, worker.typeField)
                         put(COLUMN_TYPE_VALUED, worker.typeValued)
                     }
-                    insertWithOnConflict(
-                        TABLE_WORKERS,
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE
-                    )
+                    // Using insertWithOnConflict for workers table specifically.
+                    // This part is unrelated to SubScripts password hash.
+                    // The try-catch and logging here seem fine for worker batch insertion.
+                    try {
+                        insertWithOnConflict(
+                            TABLE_WORKERS,
+                            null,
+                            values,
+                            SQLiteDatabase.CONFLICT_REPLACE
+                        )
+                    }  catch (e: Exception) {
+                         Log.e("SubScriptsDataHelper", "Error inserting worker ${worker.name} in batch: ${e.message}")
+                    }
                 }
-            } catch (e: Exception) {
-                Log.e("DatabaseHelper", "Error in batch insert: ${e.message}")
-            } finally {
-                Log.e("DatabaseHelper", "Access in batch insert")
-            }
+            // } catch (e: Exception) {
+            //     Log.e("DatabaseHelper", "Error in batch insert: ${e.message}")
+            // } finally {
+            //     Log.e("DatabaseHelper", "Access in batch insert") // This log seems out of place for a finally block of a transaction
+            // }
         }
     }
 

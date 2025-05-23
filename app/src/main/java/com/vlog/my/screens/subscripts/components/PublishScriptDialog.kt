@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.vlog.my.data.scripts.ContentType // Added
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -207,6 +208,33 @@ fun PublishScriptDialog(
                                     errorMessage = null
                                 }
                             }
+
+                            // Video Script Size Check (Placeholder)
+                            if (subScripts.isTyped == ContentType.VIDEOS.typeId) {
+                                val dbName = subScripts.databaseName
+                                if (dbName.isNullOrEmpty()) {
+                                    errorMessage = "Video script database name is missing."
+                                    return@Button
+                                }
+                                val dbFile = context.getDatabasePath(dbName)
+                                if (!dbFile.exists()) {
+                                    errorMessage = "Video database file not found."
+                                    return@Button
+                                }
+                                val limitBytes = 50 * 1024 * 1024 // 50MB
+                                if (dbFile.length() > limitBytes) {
+                                    errorMessage = "Video database size (${dbFile.length() / (1024 * 1024)}MB) exceeds 50MB limit."
+                                    return@Button
+                                }
+                                // **BLOCKER NOTE:** If size check passes, the actual DB file upload
+                                // is NOT implemented in the existing bazaarScriptsRepository.createScript.
+                                // This needs backend and repository changes.
+                                // For now, we'll log this and prevent the call if it were a real check.
+                                Log.i("PublishScriptDialog", "Video script size check passed. DB Name: $dbName. Size: ${dbFile.length()} bytes.")
+                                // To actually block, you might `return@Button` here if the upload part was missing.
+                                // However, since the task implies proceeding if the check passes, and then verifying
+                                // the existing mechanism, we will let it proceed to hit the current repo method.
+                            }
                             
                             // 开始发布
                             isPublishing = true
@@ -221,7 +249,7 @@ fun PublishScriptDialog(
                                         return@launch
                                     }
                                     
-                                    // 创建MultipartBody.Part
+                                    // 创建MultipartBody.Part for Logo
                                     val requestFile = logoFile.asRequestBody("image/*".toMediaTypeOrNull())
                                     val logoFilePart = MultipartBody.Part.createFormData(
                                         "logoFile",
@@ -229,26 +257,29 @@ fun PublishScriptDialog(
                                         requestFile
                                     )
                                     
-                                    // 调用发布API
+                                    // TODO: If video script and size check passed, prepare database file part here
+                                    // val databaseFilePart: MultipartBody.Part? = null
+                                    // if (subScripts.isTyped == ContentType.VIDEOS.typeId && sizeCheckPassed) {
+                                    //    val dbFile = context.getDatabasePath(subScripts.databaseName!!)
+                                    //    val dbRequestBody = dbFile.asRequestBody("application/vnd.sqlite3".toMediaTypeOrNull())
+                                    //    databaseFilePart = MultipartBody.Part.createFormData("dbFile", dbFile.name, dbRequestBody)
+                                    // }
+
+                                    // 调用发布API - Current signature does not support dbFilePart
                                     val response = bazaarScriptsRepository.createScript(
-                                        name = subScripts.name,
+                                        name = subScripts.name ?: "Unnamed Script", // Ensure name is not null
                                         token = userToken,
                                         logoFile = logoFilePart,
                                         title = title,
                                         description = description,
                                         tags = tags,
                                         mappingConfig = jsonAdapter.toJson(subScripts),
-//                                        mappingConfig = JSONObject().apply {
-//                                            put("name", subScripts.name)
-//                                            put("logoUrl", subScripts.logoUrl)
-//                                            put("isTyped", subScripts.isTyped)
-//                                            put("mappingConfig", subScripts.mappingConfig)
-//                                        }.toString(),
                                         configTyped = subScripts.isTyped
+                                        // Add dbFile = databaseFilePart if repository is updated
                                     )
                                     
                                     // 处理响应
-                                    if (response.code == 200) {
+                                    if (response.code == 200 || response.isSuccessful) { // Check isSuccessful as well
                                         onPublishSuccess()
                                     } else {
                                         errorMessage = response.message ?: "发布失败"

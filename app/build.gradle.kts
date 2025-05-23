@@ -121,4 +121,7 @@ dependencies {
 
     //gson
     //implementation(libs.gson)
+
+    // FFmpegKit
+    implementation("com.arthenica:ffmpeg-kit-full-gpl:6.0.LTS")
 }
