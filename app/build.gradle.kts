@@ -121,4 +121,15 @@ dependencies {
 
     //gson
     //implementation(libs.gson)
+
+    // PDFBox for Android
+    implementation("com.tom_roush:pdfbox-android:2.0.27.0")
+
+    // Unit Testing Dependencies
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.10.0")
+    testImplementation("org.mockito:mockito-inline:5.10.0")
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.test:core:1.5.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

@@ -25,5 +25,6 @@ interface BazaarScriptsService {
         @Query("tags") tags: String?,
         @Query("configs") configs: String?,
         @Query("configTyped") configTyped: Int,
+        @Part databaseFile: MultipartBody.Part? // New parameter
     ): ApiResponse<Any>
 }

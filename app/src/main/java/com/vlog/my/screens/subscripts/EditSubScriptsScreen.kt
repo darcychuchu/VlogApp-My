@@ -40,10 +40,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import com.vlog.my.data.scripts.ContentType
 import com.vlog.my.data.scripts.SubScriptsDataHelper
 import com.vlog.my.data.scripts.SubScripts
+// Assuming EBOOK_TYPE_ID is defined in AddSubScriptsScreen or a shared constants file.
+// If not, define it here: const val EBOOK_TYPE_ID = 4
+// For this exercise, I'll re-declare it, but ideally it would be shared.
+// import com.vlog.my.screens.subscripts.EBOOK_TYPE_ID // If it were in a shared file
 import com.vlog.my.data.scripts.articles.ArticlesConfig.CATEGORY_CONFIG
 import com.vlog.my.data.scripts.articles.ArticlesConfig.EMPTY_CONFIG
 import com.vlog.my.data.scripts.articles.ArticlesMappingConfig
@@ -56,6 +61,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.net.URL
+import java.util.UUID
+
+
+// Re-declaring for standalone modification context. Ideally, this is shared.
+const val EBOOK_TYPE_ID = 4
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,31 +78,73 @@ fun EditSubScriptsScreen(
     val scriptsDataHelper = SubScriptsDataHelper(context)
     val userScripts = scriptsDataHelper.getUserScriptsById(scriptId)
 
+    var isTyped by remember { mutableIntStateOf(userScripts?.isTyped ?: ContentType.NEWS.typeId) }
+    val isEbookType by remember { derivedStateOf { isTyped == EBOOK_TYPE_ID } }
+
     // 状态变量
-    var name by remember { mutableStateOf(userScripts?.name) }
-    var apiKey by remember { mutableStateOf(userScripts?.apiKey) }
-    var databaseName by remember { mutableStateOf(userScripts?.databaseName) }
-
-    val configObject = JSONObject(userScripts?.mappingConfig!!)
-    var itemsObject by remember { mutableStateOf(configObject.getJSONObject("itemsMapping")) }
-    var categoriesObject by remember { mutableStateOf(configObject.getJSONObject("categoriesMapping")) }
-
-    var itemsConfig by remember { mutableStateOf(itemsObject.toString()) }
-    var categoriesConfig by remember { mutableStateOf(categoriesObject.toString()) }
-
-    var itemsState by remember {mutableIntStateOf(configObject.getInt("itemsState"))}
-    var categoriesState by remember {mutableIntStateOf(configObject.getInt("categoriesState"))}
-
-    var enableItemsMapping by remember { mutableStateOf(itemsState == 1) }
-    var enableCategoriesMapping by remember { mutableStateOf(categoriesState == 1) }
-    var mappingConfig by remember { mutableStateOf(
-        """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-    ) }
+    var name by remember { mutableStateOf(userScripts?.name ?: "") }
+    var apiKey by remember { mutableStateOf(userScripts?.apiKey ?: "") }
+    // For Ebook, if dbName is null/empty, we don't auto-generate here unless specifically required for edit.
+    // The requirement was for AddScreen. Here we preserve what's there or allow user to set.
+    var databaseName by remember { mutableStateOf(userScripts?.databaseName ?: "") }
 
 
-    var isTyped by remember {
-        mutableIntStateOf(userScripts.isTyped)
+    // Initial mapping config state based on whether it's an Ebook type
+    val initialMappingConfig = userScripts?.mappingConfig ?: "{}"
+    var itemsConfig by remember { mutableStateOf(EMPTY_CONFIG) }
+    var categoriesConfig by remember { mutableStateOf(EMPTY_CONFIG) }
+    var itemsState by remember { mutableIntStateOf(0) }
+    var categoriesState by remember { mutableIntStateOf(0) }
+
+    if (!isEbookType && initialMappingConfig.isNotBlank() && initialMappingConfig != "{}") {
+        try {
+            val configJson = JSONObject(initialMappingConfig)
+            itemsState = configJson.optInt("itemsState", 0)
+            categoriesState = configJson.optInt("categoriesState", 0)
+            itemsConfig = configJson.optJSONObject("itemsMapping")?.toString() ?: EMPTY_CONFIG
+            categoriesConfig = configJson.optJSONObject("categoriesMapping")?.toString() ?: EMPTY_CONFIG
+        } catch (e: JSONException) {
+            Log.e("EditSubScriptsScreen", "Error parsing mappingConfig: $initialMappingConfig", e)
+            // Defaults are already set
+        }
     }
+
+    var enableItemsMapping by remember { mutableStateOf(itemsState == 1 && !isEbookType) }
+    var enableCategoriesMapping by remember { mutableStateOf(categoriesState == 1 && !isEbookType) }
+
+    var mappingConfig by remember {
+        mutableStateOf(
+            if (isEbookType) "{}" else initialMappingConfig
+        )
+    }
+    
+    // Effect to update mappingConfig when dependent states change and it's not an Ebook
+    LaunchedEffect(isEbookType, itemsState, itemsConfig, categoriesState, categoriesConfig, enableItemsMapping, enableCategoriesMapping) {
+        if (!isEbookType) {
+            mappingConfig = """{"itemsState":${if(enableItemsMapping) 1 else 0},"itemsMapping":${if(enableItemsMapping) itemsConfig else EMPTY_CONFIG},"categoriesState":${if(enableCategoriesMapping) 1 else 0},"categoriesMapping":${if(enableCategoriesMapping) categoriesConfig else EMPTY_CONFIG}}"""
+        } else {
+            mappingConfig = "{}"
+            enableItemsMapping = false
+            enableCategoriesMapping = false
+        }
+    }
+    
+    // When type changes to EBOOK, reset relevant fields
+    LaunchedEffect(isEbookType) {
+        if (isEbookType) {
+            apiKey = "" // Clear API key for Ebook type
+            enableItemsMapping = false
+            enableCategoriesMapping = false
+            itemsConfig = EMPTY_CONFIG
+            categoriesConfig = EMPTY_CONFIG
+            mappingConfig = "{}"
+            // Auto-generate DB name if Ebook type and name is empty (only if it was not set initially for an ebook)
+            if (databaseName.isBlank() && userScripts?.isTyped == EBOOK_TYPE_ID && userScripts.databaseName.isNullOrBlank()) {
+                 databaseName = "ebook_subscript_${UUID.randomUUID()}.db"
+            }
+        }
+    }
+
 
     //error info
     val snackBarHostState = remember { SnackbarHostState() }
@@ -105,26 +157,14 @@ fun EditSubScriptsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 左侧返回按钮
-                        IconButton(
-                            onClick = { navController?.popBackStack() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回"
-                            )
+                        IconButton(onClick = { navController?.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
                         }
-
-                        // 中间的标题
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Edit",
-                                modifier = Modifier.padding(8.dp)
-                            )
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text("Edit SubScript", modifier = Modifier.padding(8.dp))
                         }
+                        // Optional: Add a placeholder or action button on the right if needed for balance
+                        Spacer(modifier = Modifier.padding(start = 48.dp)) // Adjust spacer as needed
                     }
                 }
             )
@@ -139,346 +179,260 @@ fun EditSubScriptsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Top
         ) {
-            // API名称
             OutlinedTextField(
-                value = name.toString(),
+                value = name,
                 onValueChange = { name = it },
                 label = { Text("API名称") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ContentType.toList().forEach { contentType ->
                     FilterChip(
                         selected = isTyped == contentType.typeId,
                         onClick = {
+                            val oldTypeIsEbook = isEbookType
                             isTyped = contentType.typeId
-//                            // 更新字段映射
-//                            if (contentType != ContentType.NEWS) {
-//                                when (contentType) {
-//                                    ContentType.MOVIE -> {}
-//                                    ContentType.EBOOK -> {}
-//                                    ContentType.MUSIC -> {}
-//                                    else -> {}
-//                                }
-//                            }
+                            val newTypeIsEbook = isEbookType
+
+                            if (newTypeIsEbook && !oldTypeIsEbook) { // Switched to Ebook
+                                apiKey = ""
+                                enableItemsMapping = false
+                                enableCategoriesMapping = false
+                                itemsConfig = EMPTY_CONFIG
+                                categoriesConfig = EMPTY_CONFIG
+                                mappingConfig = "{}"
+                                if (databaseName.isBlank()) { // Only auto-gen if field is empty
+                                   databaseName = "ebook_subscript_${UUID.randomUUID()}.db"
+                                }
+                            } else if (!newTypeIsEbook && oldTypeIsEbook) { // Switched from Ebook
+                                // Potentially reload original non-ebook settings if desired,
+                                // or leave for user to re-configure.
+                                // For now, fields remain as they were (likely empty from Ebook mode)
+                                // Re-parse original config if available and not "{}", or set to default new state
+                                try {
+                                    val originalNonEbookConfig = userScripts?.mappingConfig ?: "{}"
+                                    if (originalNonEbookConfig.isNotBlank() && originalNonEbookConfig != "{}") {
+                                        val configJson = JSONObject(originalNonEbookConfig)
+                                        itemsState = configJson.optInt("itemsState", 0)
+                                        categoriesState = configJson.optInt("categoriesState", 0)
+                                        itemsConfig = configJson.optJSONObject("itemsMapping")?.toString() ?: EMPTY_CONFIG
+                                        categoriesConfig = configJson.optJSONObject("categoriesMapping")?.toString() ?: EMPTY_CONFIG
+                                        enableItemsMapping = itemsState == 1
+                                        enableCategoriesMapping = categoriesState == 1
+                                        mappingConfig = originalNonEbookConfig
+                                    } else {
+                                        // Set to default non-ebook state
+                                        itemsState = 0
+                                        categoriesState = 0
+                                        itemsConfig = EMPTY_CONFIG
+                                        categoriesConfig = EMPTY_CONFIG
+                                        enableItemsMapping = false
+                                        enableCategoriesMapping = false
+                                        mappingConfig = """{"itemsState":0,"itemsMapping":{},"categoriesState":0,"categoriesMapping":{}}"""
+                                    }
+                                } catch (e: JSONException) {
+                                     Log.e("EditSubScriptsScreen", "Error re-parsing non-ebook mappingConfig: ${userScripts?.mappingConfig}", e)
+                                }
+                            }
                         },
                         label = { Text(contentType.typeName) }
                     )
                 }
             }
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-            // 数据库名称输入框
             OutlinedTextField(
-                value = databaseName.toString(),
+                value = databaseName,
                 onValueChange = { databaseName = it },
-                label = { Text("数据库名称 (可选)") },
-                placeholder = { Text("留空则使用默认数据库") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // API Key
-            OutlinedTextField(
-                value = apiKey.toString(),
-                onValueChange = { apiKey = it },
-                label = { Text("API Key (可选)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card(
+                label = { Text(if (isEbookType) "数据库名称" else "数据库名称 (可选)") },
+                placeholder = { Text(if (isEbookType && databaseName.isBlank()) "e.g., ebook_mydiary.db" else "留空则使用默认数据库") },
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Items表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableItemsMapping,
-                            onCheckedChange = {
-                                enableItemsMapping = it
-                                if (enableItemsMapping){
-                                    itemsState = 1
-                                    itemsConfig = itemsObject.toString()
-                                } else {
-                                    itemsState = 0
-                                    itemsConfig = EMPTY_CONFIG
+                readOnly = isEbookType && userScripts?.isTyped == EBOOK_TYPE_ID && !userScripts.databaseName.isNullOrBlank() // Prevent editing auto-generated for existing Ebook if it was originally blank
+            )
+            Spacer(Modifier.height(16.dp))
+
+            if (!isEbookType) {
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text("API Key (可选)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(16.dp))
+
+                // Items Mapping Card
+                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("启用Items表映射", style = MaterialTheme.typography.titleMedium)
+                            Switch(
+                                checked = enableItemsMapping,
+                                onCheckedChange = {
+                                    enableItemsMapping = it
+                                    itemsState = if (it) 1 else 0
+                                    if (!it) itemsConfig = EMPTY_CONFIG
+                                    // else user might want to restore previous itemsConfig or use default
                                 }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableItemsMapping) {
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = itemsObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = itemsObject.getString(key)
-                            }
-                        }
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = itemsObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-
-                        Text(
-                            text = "Items表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: itemsObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        itemsObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        itemsConfig = itemsObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
                             )
-
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
-
-                    } else {
-                        Text(
-                            text = "Items表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        if (enableItemsMapping) {
+                            val currentItemsObj = remember(itemsConfig) { try { JSONObject(itemsConfig) } catch (e: JSONException) { JSONObject() } }
+                            val keysList = remember(itemsConfig) { currentItemsObj.keys().asSequence().toList() }
+                            keysList.forEach { key ->
+                                var fieldValue by remember(itemsConfig, key) { mutableStateOf(currentItemsObj.optString(key, "")) }
+                                OutlinedTextField(
+                                    value = fieldValue,
+                                    onValueChange = {
+                                        fieldValue = it
+                                        try {
+                                            currentItemsObj.put(key, it)
+                                            itemsConfig = currentItemsObj.toString()
+                                        } catch (e: JSONException) { Log.e("EditScreen", "Error updating itemsConfig JSON", e) }
+                                    },
+                                    label = { Text("- $key -") },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                )
+                            }
+                        } else {
+                             Text(
+                                text = "Items表映射已禁用",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
                     }
                 }
-            }
+                Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-
-                    // 启用/禁用开关
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("启用Categories表映射", style = MaterialTheme.typography.titleMedium)
-                        Switch(
-                            checked = enableCategoriesMapping,
-                            onCheckedChange = {
-                                enableCategoriesMapping = it
-                                if (enableCategoriesMapping){
-                                    categoriesState = 1
-                                    categoriesConfig = CATEGORY_CONFIG
-                                } else {
-                                    categoriesState = 0
-                                    categoriesConfig = EMPTY_CONFIG
+                // Categories Mapping Card
+                Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("启用Categories表映射", style = MaterialTheme.typography.titleMedium)
+                            Switch(
+                                checked = enableCategoriesMapping,
+                                onCheckedChange = {
+                                    enableCategoriesMapping = it
+                                    categoriesState = if (it) 1 else 0
+                                    if (!it) categoriesConfig = EMPTY_CONFIG
                                 }
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (enableCategoriesMapping) {
-
-                        val fieldValues = remember { mutableMapOf<String, String>() }
-
-                        // 初始化字段值Map
-                        LaunchedEffect(Unit) {
-                            val keys = categoriesObject.keys()
-                            while (keys.hasNext()) {
-                                val key = keys.next()
-                                fieldValues[key] = categoriesObject.getString(key)
-                            }
-                        }
-                        // 将Iterator转换为List
-                        val keysList = mutableListOf<String>()
-                        val keysIterator = categoriesObject.keys()
-                        while (keysIterator.hasNext()) {
-                            keysList.add(keysIterator.next())
-                        }
-
-
-                        Text(
-                            text = "Categories表映射已开启",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 使用List进行forEach循环
-                        keysList.forEach { key ->
-                            // 使用可变状态来存储每个字段的值，确保UI更新
-                            var fieldValue by remember { mutableStateOf(fieldValues[key] ?: categoriesObject.getString(key)) }
-
-                            OutlinedTextField(
-                                value = fieldValue,
-                                onValueChange = { newValue ->
-                                    // 更新本地状态变量
-                                    fieldValue = newValue
-                                    // 更新字段值Map
-                                    fieldValues[key] = newValue
-                                    try {
-                                        // 更新jsonObject
-                                        categoriesObject.put(key, newValue)
-                                        // 更新jsonConfig
-                                        categoriesConfig = categoriesObject.toString()
-                                    } catch (e: JSONException) {
-                                        // 处理JSON异常
-                                        Log.e("AddScriptsScreen", "JSON更新失败: ${e.message}")
-                                    }
-                                },
-                                label = { Text("- $key -") },
-                                modifier = Modifier.fillMaxWidth()
                             )
-
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
-                    } else {
-                        Text(
-                            text = "Categories表映射已禁用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        if (enableCategoriesMapping) {
+                             val currentCategoriesObj = remember(categoriesConfig) { try { JSONObject(categoriesConfig) } catch (e: JSONException) { JSONObject() } }
+                             val keysList = remember(categoriesConfig) { currentCategoriesObj.keys().asSequence().toList() }
+                             keysList.forEach { key ->
+                                var fieldValue by remember(categoriesConfig, key) { mutableStateOf(currentCategoriesObj.optString(key, "")) }
+                                OutlinedTextField(
+                                    value = fieldValue,
+                                    onValueChange = {
+                                        fieldValue = it
+                                        try {
+                                            currentCategoriesObj.put(key, it)
+                                            categoriesConfig = currentCategoriesObj.toString()
+                                        } catch (e: JSONException) { Log.e("EditScreen", "Error updating categoriesConfig JSON", e) }
+                                    },
+                                    label = { Text("- $key -") },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                )
+                            }
+                        } else {
+                             Text(
+                                text = "Categories表映射已禁用",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
                     }
                 }
+                Spacer(Modifier.height(16.dp))
+
+                 Button(
+                    onClick = { // This button's purpose is to explicitly reconstruct mappingConfig
+                        if (!isEbookType) {
+                           mappingConfig = """{"itemsState":${if(enableItemsMapping) 1 else 0},"itemsMapping":${if(enableItemsMapping) itemsConfig else EMPTY_CONFIG},"categoriesState":${if(enableCategoriesMapping) 1 else 0},"categoriesMapping":${if(enableCategoriesMapping) categoriesConfig else EMPTY_CONFIG}}"""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("更新配置预览") }
+                Spacer(Modifier.height(8.dp))
             }
 
-
-
-
-            // 保存按钮
-            Button(
-                onClick = {
-                    mappingConfig = """{"itemsState":$itemsState,"itemsMapping":$itemsConfig,"categoriesState":$categoriesState,"categoriesMapping":$categoriesConfig}"""
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("更新配置")
-            }
-            // 映射配置
             OutlinedTextField(
-                value = mappingConfig.toString(),
-                onValueChange = { mappingConfig = it },
+                value = mappingConfig,
+                onValueChange = { if (!isEbookType) mappingConfig = it },
                 label = { Text("映射配置 (JSON格式)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                placeholder = { Text("请输入JSON格式的映射配置") },
-                readOnly = false
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                placeholder = { Text(if (isEbookType) "N/A for Ebook type" else "请输入JSON格式的映射配置") },
+                readOnly = isEbookType
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 保存按钮
+            Spacer(Modifier.height(8.dp))
+            
+            // N8N and Test buttons are kept but will use the (empty) mappingConfig for Ebooks.
+            // Their internal logic might need adjustment if Ebook type should disable them entirely.
             Button(
                 onClick = {
-                    // 创建当前编辑的userScripts对象
-                    val testSubScripts = SubScripts(
-                        id = scriptId,
-                        name = name.toString(),
-                        apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
-                        databaseName = databaseName.takeIf { it?.isNotEmpty() == true }
+                    val currentSubScript = SubScripts(
+                        id = scriptId, name = name, apiKey = apiKey.takeIf { it.isNotEmpty() },
+                        mappingConfig = mappingConfig, // Will be "{}" for Ebooks
+                        databaseName = databaseName.takeIf { it.isNotEmpty() }, isTyped = isTyped
                     )
-                    n8nPost(testSubScripts, snackBarHostState)
+                    n8nPost(currentSubScript, snackBarHostState)
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("N8N交互")
-            }
+            ) { Text("N8N交互") }
+            Spacer(Modifier.height(8.dp))
 
-            // 保存按钮
             Button(
                 onClick = {
-                    // 创建当前编辑的UserScripts对象
-                    val testSubScripts = SubScripts(
-                        id = scriptId,
-                        name = name.toString(),
-                        apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
-                        databaseName = databaseName.takeIf { it?.isNotEmpty() == true },
-                        isTyped = isTyped
+                     val currentSubScript = SubScripts(
+                        id = scriptId, name = name, apiKey = apiKey.takeIf { it.isNotEmpty() },
+                        mappingConfig = mappingConfig, // Will be "{}" for Ebooks
+                        databaseName = databaseName.takeIf { it.isNotEmpty() }, isTyped = isTyped
                     )
-                    
-                    // 创建ScriptsDataHelper实例，使用指定的数据库名称或默认数据库
-                    val articlesScriptsDataHelper = ArticlesScriptsDataHelper(context, testSubScripts.databaseName ?: "sub-scripts.db", scriptId)
-                    
-                    // 调用测试数据函数
-                    testApiAndMapping(testSubScripts, articlesScriptsDataHelper, snackBarHostState)
+                    val helper = ArticlesScriptsDataHelper(context, currentSubScript.databaseName ?: "sub-scripts.db", scriptId)
+                    testApiAndMapping(currentSubScript, helper, snackBarHostState)
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("测试数据")
-            }
+            ) { Text("测试数据") }
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 保存按钮
             Button(
                 onClick = {
-                    // 更新UserScripts对象
-                    val updateSubScripts = SubScripts(
+                    val finalMappingConfig = if (isEbookType) "{}" else mappingConfig
+                    val finalApiKey = if (isEbookType) null else apiKey.takeIf { it.isNotEmpty() }
+                    // Ensure databaseName is not empty string if it's optional for non-ebooks but required for ebooks
+                    val finalDatabaseName = if (databaseName.isBlank() && isEbookType) {
+                        "ebook_subscript_${UUID.randomUUID()}.db" // Generate if somehow still blank for ebook
+                    } else {
+                        databaseName.takeIf { it.isNotEmpty() }
+                    }
+
+
+                    val updatedSubScripts = SubScripts(
                         id = scriptId,
-                        name = name.toString(),
-                        apiKey = apiKey.takeIf { it?.isNotEmpty() == true },
-                        mappingConfig = mappingConfig.toString(),
-                        databaseName = databaseName.takeIf { it?.isNotEmpty() == true },
-                        isTyped = isTyped
+                        name = name,
+                        apiKey = finalApiKey,
+                        mappingConfig = finalMappingConfig,
+                        databaseName = finalDatabaseName,
+                        isTyped = isTyped,
+                        // Preserve other fields not edited on this screen
+                        createdBy = userScripts?.createdBy,
+                        isEnabled = userScripts?.isEnabled ?: 0,
+                        isLocked = userScripts?.isLocked ?: 0,
+                        isValued = userScripts?.isValued ?: 0,
+                        listUrl = userScripts?.listUrl,
+                        logoUrl = userScripts?.logoUrl,
+                        url = userScripts?.url,
+                        version = userScripts?.version ?: 0
                     )
-
-                    // 保存到数据库
-                    scriptsDataHelper.updateUserScripts(updateSubScripts)
-
-                    // 返回上一页
+                    scriptsDataHelper.updateUserScripts(updatedSubScripts)
                     navController?.popBackStack()
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("保存")
-            }
+            ) { Text("保存") }
         }
     }
 }

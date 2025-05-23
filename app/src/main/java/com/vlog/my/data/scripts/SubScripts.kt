@@ -1,11 +1,14 @@
 package com.vlog.my.data.scripts
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
 /**
  * API配置数据模型，用于存储用户配置的API信息
  */
-//@JsonClass(generateAdapter = true)
+@Entity(tableName = "sub_scripts") // Added @Entity annotation
 data class SubScripts(
-    var id: String? = null,
+    @PrimaryKey var id: String, // Made id non-nullable and PrimaryKey
     var name: String = "",         // API名称
     var url: String? = null,      // 列表数据API URL
     var listUrl: String? = null,      // 列表数据API URL
@@ -19,20 +22,8 @@ data class SubScripts(
     var isValued: Int = 0,  // isLocked = 1, isValued = contribute & bonus
     var version: Int = 0,
     var createdBy: String? = null
-
-
-//    @field:Json(name = "id") var id: String? = null,
-//@field:Json(name = "name") var name: String = "",
-//@field:Json(name = "url") var url: String? = null,
-//@field:Json(name = "listUrl") var listUrl: String? = null,
-//@field:Json(name = "logoUrl") var logoUrl: String? = null,
-//@field:Json(name = "apiKey") var apiKey: String? = null,
-//@field:Json(name = "mappingConfig") var mappingConfig: String = "",
-//@field:Json(name = "databaseName") var databaseName: String? = null,
-//@field:Json(name = "isTyped") var isTyped: Int = 0,
-//@field:Json(name = "isEnabled") var isEnabled: Int = 0,
-//@field:Json(name = "isLocked") var isLocked: Int = 0,
-//@field:Json(name = "isValued") var isValued: Int = 0,
-//@field:Json(name = "version") var version: Int = 0,
-//@field:Json(name = "createdBy") var createdBy: String? = null
-)
+    // Note: The commented out Json fields are not relevant for Room unless you use a TypeConverter for them.
+) {
+    // Add a no-argument constructor for Room
+    constructor() : this(id = "", name = "")
+}

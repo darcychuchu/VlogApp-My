@@ -62,29 +62,42 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.vlog.my.data.bazaar.BazaarScripts
+import com.vlog.my.data.scripts.ContentType // For EBOOK_TYPE_ID
+import com.vlog.my.data.scripts.SubScriptsDataHelper
 import com.vlog.my.di.Constants.IMAGE_BASE_URL
 import kotlinx.coroutines.launch
+import android.app.Application // For BazaarDownloadViewModelFactory
+
+// Define EBOOK_TYPE_ID if not universally available
+private const val EBOOK_TYPE_ID = 4 // Matches ContentType.EBOOK.typeId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BazaarScriptsScreen(
     modifier: Modifier = Modifier,
     navController: NavController? = null,
-    viewModel: BazaarScriptsViewModel = hiltViewModel()
+    viewModel: BazaarScriptsViewModel = hiltViewModel(),
+    // Manually creating factory for BazaarDownloadViewModel as it's not Hilt-managed here
+    downloadViewModelFactory: BazaarDownloadViewModelFactory = BazaarDownloadViewModelFactory(
+        LocalContext.current.applicationContext as Application,
+        SubScriptsDataHelper(LocalContext.current.applicationContext)
+    ),
+    downloadViewModel: BazaarDownloadViewModel = viewModel(factory = downloadViewModelFactory)
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
     val serverScripts by viewModel.serverScripts.collectAsState()
     val localScripts by viewModel.localScripts.collectAsState()
     val selectedScript by viewModel.selectedScript.collectAsState()
-    
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    
+
     // 显示消息
     LaunchedEffect(uiState.message) {
         uiState.message?.let {
@@ -94,7 +107,7 @@ fun BazaarScriptsScreen(
             }
         }
     }
-    
+
     // 显示错误
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
@@ -104,7 +117,7 @@ fun BazaarScriptsScreen(
             }
         }
     }
-    
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -133,14 +146,29 @@ fun BazaarScriptsScreen(
                     text = { Text("我的") }
                 )
             }
-            
+
             // 内容区域
             Box(modifier = Modifier.fillMaxSize()) {
                 when (selectedTabIndex) {
                     0 -> ServerScriptsList(
                         scripts = serverScripts,
                         onScriptClick = { viewModel.selectScript(it) },
-                        onDownloadClick = { viewModel.downloadScript(it) },
+                        onDownloadClick = { bazaarScript ->
+                            if (bazaarScript.configTyped == EBOOK_TYPE_ID && !bazaarScript.databaseUrl.isNullOrBlank()) {
+                                scope.launch {
+                                    val success = downloadViewModel.downloadAndIntegrateEbook(bazaarScript)
+                                    if (success) {
+                                        snackbarHostState.showSnackbar("${bazaarScript.title} downloaded and integrated successfully.")
+                                        viewModel.loadLocalScripts() // Refresh local list
+                                    } else {
+                                        snackbarHostState.showSnackbar("Failed to download/integrate ${bazaarScript.title}.")
+                                    }
+                                }
+                            } else {
+                                // Fallback to original download logic for non-ebooks or if URL is missing
+                                viewModel.downloadScript(bazaarScript)
+                            }
+                        },
                         onRefreshClick = { viewModel.loadServerScripts() },
                         isLoading = uiState.isLoading
                     )
