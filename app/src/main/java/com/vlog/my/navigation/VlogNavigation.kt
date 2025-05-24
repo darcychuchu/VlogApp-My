@@ -35,6 +35,13 @@ import com.vlog.my.screens.subscripts.SubScriptsScreen
 import com.vlog.my.screens.users.LoginScreen
 import com.vlog.my.screens.users.RegisterScreen
 import com.vlog.my.screens.users.UserViewModel
+import com.vlog.my.screens.subscripts.articles.AddArticleScreen
+import com.vlog.my.screens.subscripts.music.AddMusicScreen
+import com.vlog.my.screens.subscripts.videos.AddVideoScriptScreen
+import com.vlog.my.screens.subscripts.ebooks.AddEbookScreen
+import com.vlog.my.screens.subscripts.articles.EditArticleScreen
+import com.vlog.my.screens.subscripts.music.EditMusicScreen
+import com.vlog.my.screens.subscripts.videos.EditVideoScriptScreen
 import java.net.URLDecoder
 
 sealed class Screen(val route: String) {
@@ -126,6 +133,37 @@ sealed class Screen(val route: String) {
         }
     }
 
+    object AddArticleScript : Screen("add_article_script") {
+        fun createRoute(): String = "add_article_script"
+    }
+
+    object AddMusicScript : Screen("add_music_script") {
+        fun createRoute(): String = "add_music_script"
+    }
+
+    object AddEbookScript : Screen("add_ebook_script") {
+        fun createRoute(): String = "add_ebook_script"
+    }
+
+    object AddVideoScript : Screen("add_video_script") {
+        fun createRoute(): String = "add_video_script"
+    }
+
+    object EditArticleScript : Screen("edit_article_script/{articleId}") {
+        fun createRoute(articleId: String): String = "edit_article_script/$articleId"
+    }
+
+    object EditMusicScript : Screen("edit_music_script/{musicScriptId}") {
+        fun createRoute(musicScriptId: String): String = "edit_music_script/$musicScriptId"
+    }
+
+    object EditEbookScript : Screen("edit_ebook_script/{ebookScriptId}") {
+        fun createRoute(ebookScriptId: String): String = "edit_ebook_script/$ebookScriptId"
+    }
+
+    object EditVideoScript : Screen("edit_video_script/{videoScriptId}") {
+        fun createRoute(videoScriptId: String): String = "edit_video_script/$videoScriptId"
+    }
 }
 
 @Composable
@@ -417,6 +455,46 @@ val localDataHelper = remember {
                         navController.popBackStack()
                     }
                 }
+            }
+
+            composable(Screen.AddArticleScript.route) {
+                AddArticleScreen(navController = navController)
+            }
+
+            composable(Screen.AddMusicScript.route) {
+                AddMusicScreen(navController = navController)
+            }
+
+            composable(Screen.AddVideoScript.route) {
+                AddVideoScriptScreen(navController = navController)
+            }
+
+            composable(Screen.AddEbookScript.route) {
+                AddEbookScreen(navController = navController)
+            }
+
+            composable(
+                route = Screen.EditArticleScript.route,
+                arguments = listOf(navArgument("articleId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val articleId = backStackEntry.arguments?.getString("articleId")
+                EditArticleScreen(navController = navController, articleId = articleId)
+            }
+
+            composable(
+                route = Screen.EditMusicScript.route,
+                arguments = listOf(navArgument("musicScriptId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val musicScriptId = backStackEntry.arguments?.getString("musicScriptId")
+                EditMusicScreen(navController = navController, musicScriptId = musicScriptId)
+            }
+
+            composable(
+                route = Screen.EditVideoScript.route,
+                arguments = listOf(navArgument("videoScriptId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val videoScriptId = backStackEntry.arguments?.getString("videoScriptId")
+                EditVideoScriptScreen(navController = navController, videoScriptId = videoScriptId)
             }
 
         }

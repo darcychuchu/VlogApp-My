@@ -25,6 +25,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +63,7 @@ fun SubScriptsScreen(
     val bazaarScriptsRepository = bazaarViewModel.repository
     val context = LocalContext.current
     val scriptsDataHelper = SubScriptsDataHelper(context)
+    var showMenu by remember { mutableStateOf(false) }
 
     // 获取当前用户信息
     val currentUser by userViewModel.currentUser.collectAsState()
@@ -152,6 +157,46 @@ fun SubScriptsScreen(
                             Text(
                                 text = "Sub Scripts",
                                 modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                        
+                        // 添加汉堡按钮
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多选项")
+                        }
+                        
+                        // 下拉菜单
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("添加文章脚本") },
+                                onClick = {
+                                    navController?.navigate(Screen.AddArticleScript.createRoute())
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加音乐脚本") },
+                                onClick = {
+                                    navController?.navigate(Screen.AddMusicScript.createRoute())
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加视频脚本") },
+                                onClick = {
+                                    navController?.navigate(Screen.AddVideoScript.createRoute())
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加电子书脚本") },
+                                onClick = {
+                                    navController?.navigate(Screen.AddEbookScript.createRoute())
+                                    showMenu = false
+                                }
                             )
                         }
                     }
