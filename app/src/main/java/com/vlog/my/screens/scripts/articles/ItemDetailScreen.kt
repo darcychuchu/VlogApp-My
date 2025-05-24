@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayCircleOutline
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,6 +43,7 @@ import com.vlog.my.data.scripts.SubScriptsDataHelper
 import com.vlog.my.data.scripts.articles.ArticlesCategories
 import com.vlog.my.data.scripts.articles.ArticlesItems
 import com.vlog.my.data.scripts.articles.ArticlesScriptsDataHelper
+import com.vlog.my.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -191,6 +194,38 @@ fun ItemDetailScreen(
                     text = item?.content ?: "无内容",
                     style = MaterialTheme.typography.bodyMedium
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Assume ArticlesItems now has:
+                // var linkedVideoScriptDbName: String? = null
+                // var linkedVideoIdInScript: String? = null
+                // var externalVideoUrl: String? = null
+
+//                val linkedDbName = item?.linkedVideoScriptDbName // Replace with actual field access
+//                val linkedVideoId = item?.linkedVideoIdInScript // Replace with actual field access
+//                val externalUrl = item?.externalVideoUrl // Replace with actual field access
+//
+//                if (!externalUrl.isNullOrBlank() || (!linkedDbName.isNullOrBlank() && !linkedVideoId.isNullOrBlank())) {
+//                    Button(
+//                        onClick = {
+//                            if (!linkedDbName.isNullOrBlank() && !linkedVideoId.isNullOrBlank()) {
+//                                navController?.navigate(Screen.VideoPlayer.createRouteForLocal(
+//                                    linkedDbName.toString(), linkedVideoId.toString()
+//                                ))
+//                            } else if (!externalUrl.isNullOrBlank()) {
+//                                navController?.navigate(Screen.VideoPlayer.createRouteForUrl(
+//                                    externalUrl.toString()
+//                                ))
+//                            }
+//                        },
+//                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+//                    ) {
+//                        Icon(Icons.Filled.PlayCircleOutline, contentDescription = "Play Video Icon")
+//                        Spacer(modifier = Modifier.width(8.dp))
+//                        Text("Play Associated Video")
+//                    }
+//                }
             }
         }
     }

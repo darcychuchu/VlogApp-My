@@ -1,11 +1,11 @@
 package com.vlog.my.data.scripts
 
-/**
- * API配置数据模型，用于存储用户配置的API信息
- */
-//@JsonClass(generateAdapter = true)
-data class SubScripts(
-    var id: String? = null,
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "ebook_scripts") // Added @Entity annotation
+data class EbookScripts(
+    @PrimaryKey var id: String,
     var name: String = "",         // API名称
     var url: String? = null,      // 列表数据API URL
     var listUrl: String? = null,      // 列表数据API URL
@@ -20,5 +20,7 @@ data class SubScripts(
     var version: Int = 0,
     var createdBy: String? = null,
     var scriptPasswordHash: String? = null // Stores salt:hash for password protection
-
-)
+) {
+    // Add a no-argument constructor for Room
+    constructor() : this(id = "", name = "")
+}

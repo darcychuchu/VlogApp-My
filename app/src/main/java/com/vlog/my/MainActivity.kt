@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import com.vlog.my.navigation.VlogNavigation
-import com.vlog.my.ui.theme.MyApplicationTheme
+import com.vlog.my.ui.theme.VlogAppMyTheme
 import com.vlog.my.utils.StoragePermissionHelper
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         }
         
         setContent {
-            MyApplicationTheme {
+            VlogAppMyTheme {
                 VlogNavigation()
             }
         }

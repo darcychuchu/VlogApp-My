@@ -19,5 +19,6 @@ data class BazaarScripts(
     var description: String? = null,
     var tags: String? = null,
     var configTyped: Int? = null,
-    var configs: String? = null
+    var configs: String? = null,
+    var databaseUrl: String? = null // New field for Ebook database download URL
 )

@@ -244,7 +244,8 @@ fun PublishScriptDialog(
 //                                            put("isTyped", subScripts.isTyped)
 //                                            put("mappingConfig", subScripts.mappingConfig)
 //                                        }.toString(),
-                                        configTyped = subScripts.isTyped
+                                        configTyped = subScripts.isTyped,
+                                        databaseFile = null
                                     )
                                     
                                     // 处理响应

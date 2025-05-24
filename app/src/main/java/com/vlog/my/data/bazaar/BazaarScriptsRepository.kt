@@ -25,7 +25,8 @@ class BazaarScriptsRepository @Inject constructor(
         description: String,
         tags: String?,
         mappingConfig: String,
-        configTyped: Int = 0
+        configTyped: Int = 0,
+        databaseFile: MultipartBody.Part? // New parameter
     ): ApiResponse<Any> {
         return bazaarScriptsService.createScript(
             name = name,
@@ -35,7 +36,8 @@ class BazaarScriptsRepository @Inject constructor(
             description = description,
             tags = tags,
             configs = mappingConfig,
-            configTyped = configTyped
+            configTyped = configTyped,
+            databaseFile = databaseFile // Pass new parameter
         )
     }
 

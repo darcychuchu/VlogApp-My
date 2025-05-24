@@ -264,6 +264,14 @@ fun SubScriptsScreen(
                                     // 如果未登录，可以导航到登录页面
                                     navController?.navigate("login")
                                 }
+                            },
+                            onManageTracksClick = { clickedUserScript ->
+                                if (clickedUserScript.id != null && clickedUserScript.databaseName != null) {
+                                    navController?.navigate(Screen.MusicTracks.createRoute(clickedUserScript.id!!, clickedUserScript.databaseName!!))
+                                } else {
+                                    // Optional: Log an error or show a toast if id or databaseName is null
+                                    android.util.Log.e("SubScriptsScreen", "Cannot navigate to MusicTracksScreen: id or databaseName is null. ID: ${clickedUserScript.id}, DBName: ${clickedUserScript.databaseName}")
+                                }
                             }
                         )
                     }

@@ -11,7 +11,8 @@ enum class ContentType(val typeId: Int, val typeName: String) {
     NEWS(1,"新闻"),
     MUSIC(2,"音乐"),
     MOVIE(3,"电影"),
-    EBOOK(4,"电子书");
+    EBOOK(4,"电子书"),
+    VIDEOS(5, "视频");
 
     companion object {
         fun toList(): EnumEntries<ContentType> {

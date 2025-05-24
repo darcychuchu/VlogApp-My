@@ -10,7 +10,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
-import androidx.core.content.ContextCompat
+import androidx.annotation.RequiresApi
 
 /**
  * 存储权限辅助类，用于处理Android不同版本的存储权限请求
@@ -22,15 +22,9 @@ class StoragePermissionHelper {
         /**
          * 检查是否有存储权限
          */
+        @RequiresApi(Build.VERSION_CODES.R)
         fun hasStoragePermission(context: Context): Boolean {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11及以上使用MANAGE_EXTERNAL_STORAGE权限
-                Environment.isExternalStorageManager()
-            } else {
-                // Android 10及以下使用READ_EXTERNAL_STORAGE和WRITE_EXTERNAL_STORAGE权限
-                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-            }
+            return Environment.isExternalStorageManager()
         }
         
         /**

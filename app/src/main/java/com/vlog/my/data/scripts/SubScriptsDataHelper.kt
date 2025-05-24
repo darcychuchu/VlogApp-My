@@ -6,12 +6,16 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import com.vlog.my.data.model.Workers
+import com.vlog.my.data.scripts.music.MusicScriptDataHelper
+import java.io.File
 import java.util.UUID
 import androidx.core.database.sqlite.transaction
 
 class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE_NAME) : SQLiteOpenHelper(context, databaseName, null, DATABASE_VERSION) {
 
     companion object {
+        // Assuming ContentType.MUSIC.typeId is 2 as per instructions
+        private const val CONTENT_TYPE_MUSIC_TYPE_ID = 2
         private const val DATABASE_NAME = "sub-scripts-database.db"
         private const val DATABASE_VERSION = 1
 
@@ -33,6 +37,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
         private const val COLUMN_API_KEY = "api_key"
         private const val COLUMN_MAPPING_CONFIG = "mapping_config"
         private const val COLUMN_DATABASE_NAME = "database_name"
+        private const val COLUMN_SCRIPT_PASSWORD_HASH = "script_password_hash" // New column
 
         // workers表字段
         private const val TABLE_WORKERS = "workers"
@@ -66,7 +71,8 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                 $COLUMN_IS_TYPED INTEGER,
                 $COLUMN_IS_VALUED INTEGER,
                 $COLUMN_VERSION INTEGER,
-                $COLUMN_CREATED_BY TEXT
+                $COLUMN_CREATED_BY TEXT,
+                $COLUMN_SCRIPT_PASSWORD_HASH TEXT
             )
         """.trimIndent()
 
@@ -135,7 +141,7 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             userScriptRow.logoUrl?.let { put(COLUMN_LOGO_URL, it) }
             put(COLUMN_API_KEY, userScriptRow.apiKey)
             put(COLUMN_MAPPING_CONFIG, userScriptRow.mappingConfig)
-            userScriptRow.databaseName?.let { put(COLUMN_DATABASE_NAME, it) }
+            // userScriptRow.databaseName?.let { put(COLUMN_DATABASE_NAME, it) } // Modified below
             put(COLUMN_IS_TYPED, userScriptRow.isTyped)
             put(COLUMN_IS_LOCKED, userScriptRow.isLocked)
             put(COLUMN_IS_ENABLED, userScriptRow.isEnabled)
@@ -143,7 +149,22 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_IS_VALUED, userScriptRow.isValued)
             put(COLUMN_VERSION, userScriptRow.version)
             put(COLUMN_CREATED_BY, userScriptRow.createdBy)
+            userScriptRow.scriptPasswordHash?.let { put(COLUMN_SCRIPT_PASSWORD_HASH, it) }
         }
+
+        if (userScriptRow.isTyped == CONTENT_TYPE_MUSIC_TYPE_ID) {
+            val musicDbName = "music_script_${UUID.randomUUID()}.db"
+            values.put(COLUMN_DATABASE_NAME, musicDbName)
+            // Create the music database file
+            val musicHelper = MusicScriptDataHelper(context, musicDbName)
+            musicHelper.writableDatabase.close() // This ensures the db file is created
+            userScriptRow.databaseName = musicDbName // Update the object in memory
+            Log.d("SubScriptsDataHelper", "Created music database: $musicDbName")
+        } else {
+            // For other types, use the provided databaseName or null
+            userScriptRow.databaseName?.let { values.put(COLUMN_DATABASE_NAME, it) }
+        }
+
         return db.insert(TABLE_SUB_SCRIPTS, null, values)
     }
     
@@ -164,6 +185,11 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
             put(COLUMN_IS_VALUED, userScriptRow.isValued)
             put(COLUMN_VERSION, userScriptRow.version)
             put(COLUMN_CREATED_BY, userScriptRow.createdBy)
+            if (userScriptRow.scriptPasswordHash == null) {
+                putNull(COLUMN_SCRIPT_PASSWORD_HASH)
+            } else {
+                put(COLUMN_SCRIPT_PASSWORD_HASH, userScriptRow.scriptPasswordHash)
+            }
         }
         return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(userScriptRow.id.toString()))
     }
@@ -194,7 +220,8 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                     isEnabled = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_ENABLED)),
                     isValued = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_VALUED)),
                     version = it.getInt(it.getColumnIndexOrThrow(COLUMN_VERSION)),
-                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY))
+                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY)),
+                    scriptPasswordHash = it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
                 )
             } else {
                 null
@@ -231,7 +258,9 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
                     isEnabled = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_ENABLED)),
                     isValued = it.getInt(it.getColumnIndexOrThrow(COLUMN_IS_VALUED)),
                     version = it.getInt(it.getColumnIndexOrThrow(COLUMN_VERSION)),
-                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY))
+                    createdBy = it.getString(it.getColumnIndexOrThrow(COLUMN_CREATED_BY)),
+                    scriptPasswordHash = it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
+
                 )
                 userScriptList.add(userScriptRow)
             }
@@ -241,6 +270,24 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
     
     fun deleteUserScripts(id: String): Int {
         val db = writableDatabase
+        val subScript = getUserScriptsById(id)
+
+        if (subScript != null && subScript.isTyped == CONTENT_TYPE_MUSIC_TYPE_ID && !subScript.databaseName.isNullOrEmpty()) {
+            try {
+                val dbFile = context.getDatabasePath(subScript.databaseName)
+                if (dbFile.exists()) {
+                    if (dbFile.delete()) {
+                        Log.i("SubScriptsDataHelper", "Successfully deleted music database: ${subScript.databaseName}")
+                    } else {
+                        Log.e("SubScriptsDataHelper", "Failed to delete music database: ${subScript.databaseName}")
+                    }
+                } else {
+                    Log.w("SubScriptsDataHelper", "Music database file not found, skipping deletion: ${subScript.databaseName}")
+                }
+            } catch (e: Exception) {
+                Log.e("SubScriptsDataHelper", "Error deleting music database ${subScript.databaseName}: ${e.message}")
+            }
+        }
         return db.delete(TABLE_SUB_SCRIPTS, "$COLUMN_ID = ?", arrayOf(id))
     }
     
@@ -258,6 +305,36 @@ class SubScriptsDataHelper(val context: Context, databaseName: String = DATABASE
         return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(id))
     }
 
+    fun updateScriptPasswordHash(scriptId: String, passwordHash: String?): Int {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            if (passwordHash == null) {
+                putNull(COLUMN_SCRIPT_PASSWORD_HASH)
+            } else {
+                put(COLUMN_SCRIPT_PASSWORD_HASH, passwordHash)
+            }
+        }
+        return db.update(TABLE_SUB_SCRIPTS, values, "$COLUMN_ID = ?", arrayOf(scriptId))
+    }
+
+    fun getScriptPasswordHash(scriptId: String): String? {
+        val db = readableDatabase
+        val cursor = db.query(
+            TABLE_SUB_SCRIPTS,
+            arrayOf(COLUMN_SCRIPT_PASSWORD_HASH), // Select only the password hash column
+            "$COLUMN_ID = ?",
+            arrayOf(scriptId),
+            null, null, null, null
+        )
+
+        return cursor.use {
+            if (it.moveToFirst()) {
+                it.getString(it.getColumnIndexOrThrow(COLUMN_SCRIPT_PASSWORD_HASH))
+            } else {
+                null
+            }
+        }
+    }
 
 
 

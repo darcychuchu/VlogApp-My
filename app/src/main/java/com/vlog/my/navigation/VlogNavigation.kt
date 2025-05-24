@@ -8,6 +8,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -28,7 +29,6 @@ import com.vlog.my.screens.home.HomeScreen
 import com.vlog.my.screens.profile.ProfileScreen
 import com.vlog.my.screens.scripts.articles.ItemListScreen
 import com.vlog.my.screens.subscripts.workers.WorkersScreen
-import com.vlog.my.screens.settings.SettingsScreen
 import com.vlog.my.screens.subscripts.AddSubScriptsScreen
 import com.vlog.my.screens.subscripts.EditSubScriptsScreen
 import com.vlog.my.screens.subscripts.SubScriptsScreen
@@ -94,6 +94,36 @@ sealed class Screen(val route: String) {
     
     object DownloadApp : Screen("download_app") {
         fun createRoute(): String = "download_app"
+    }
+
+
+
+    object MusicTracks : Screen("music_tracks/{subScriptId}/{musicDatabaseName}") {
+        fun createRoute(subScriptId: String, musicDatabaseName: String): String = "music_tracks/$subScriptId/$musicDatabaseName"
+    }
+
+
+    // Video Feature Screens
+    object VideoList : Screen("video_list/{scriptId}/{databaseName}") {
+        fun createRoute(scriptId: String, databaseName: String): String = "video_list/$scriptId/$databaseName"
+    }
+
+    object AddVideo : Screen("add_video/{databaseName}") {
+        fun createRoute(databaseName: String): String = "add_video/$databaseName"
+    }
+
+    // Route for VideoPlayerScreen, supporting either local DB video or direct URL
+    // Example Nav: video_player?databaseName=myDb.db&videoId=123
+    // Example Nav: video_player?videoUrl=http://example.com/video.mp4
+    object VideoPlayer : Screen("video_player?databaseName={databaseName}&videoId={videoId}&videoUrl={videoUrl}") {
+        fun createRouteForLocal(databaseName: String, videoId: String): String =
+            "video_player?databaseName=$databaseName&videoId=$videoId"
+
+        fun createRouteForUrl(videoUrl: String): String {
+            // Ensure URL is properly encoded for navigation
+            val encodedUrl = java.net.URLEncoder.encode(videoUrl, "UTF-8")
+            return "video_player?videoUrl=$encodedUrl"
+        }
     }
 
 }
@@ -294,6 +324,99 @@ val localDataHelper = remember {
 //                        navController.popBackStack()
 //                    }
 //                )
+            }
+
+            composable(
+                route = Screen.MusicTracks.route,
+                arguments = listOf(
+                    navArgument("subScriptId") { type = NavType.StringType },
+                    navArgument("musicDatabaseName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val subScriptId = backStackEntry.arguments?.getString("subScriptId") ?: ""
+                val musicDatabaseName = backStackEntry.arguments?.getString("musicDatabaseName") ?: ""
+                com.vlog.my.screens.subscripts.music.MusicTracksScreen(
+                    navController = navController,
+                    subScriptId = subScriptId,
+                    musicDatabaseName = musicDatabaseName
+                )
+            }
+
+
+
+
+            // Video Feature Screen Composable
+            composable(
+                route = Screen.VideoList.route,
+                arguments = listOf(
+                    navArgument("scriptId") { type = NavType.StringType },
+                    navArgument("databaseName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val scriptId = backStackEntry.arguments?.getString("scriptId") ?: return@composable
+                val databaseName = backStackEntry.arguments?.getString("databaseName") ?: return@composable
+                com.vlog.my.screens.videos.VideoListScreen(
+                    navController = navController,
+                    scriptId = scriptId,
+                    databaseName = databaseName
+                )
+            }
+
+            composable(
+                route = Screen.AddVideo.route,
+                arguments = listOf(
+                    navArgument("databaseName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val databaseName = backStackEntry.arguments?.getString("databaseName") ?: return@composable
+                com.vlog.my.screens.videos.AddVideoScreen(
+                    databaseName = databaseName
+                    // onUploadSuccess = { navController.popBackStack() } // Example
+                )
+            }
+
+            composable(
+                route = Screen.VideoPlayer.route,
+                arguments = listOf(
+                    navArgument("databaseName") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("videoId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("videoUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val databaseNameArg = backStackEntry.arguments?.getString("databaseName")
+                val videoIdArg = backStackEntry.arguments?.getString("videoId")
+                val videoUrlArg = backStackEntry.arguments?.getString("videoUrl")?.let {
+                    java.net.URLDecoder.decode(it, "UTF-8") // Decode URL
+                }
+
+                // Validate that we have a valid source
+                if ((databaseNameArg != null && videoIdArg != null) || videoUrlArg != null) {
+                    com.vlog.my.screens.videos.VideoPlayerScreen(
+                        navController = navController,
+                        databaseName = databaseNameArg.toString(),
+                        initialVideoId = videoIdArg.toString(),
+                        initialVideoUrl = videoUrlArg
+                    )
+                } else {
+                    // Handle error: Invalid arguments, navigate back or show error message
+                    // For simplicity, just popBackStack, but a real app might show a toast/error screen
+                    Text("Error: Invalid video source provided.")
+                    LaunchedEffect(Unit) {
+                        navController.popBackStack()
+                    }
+                }
             }
 
         }
