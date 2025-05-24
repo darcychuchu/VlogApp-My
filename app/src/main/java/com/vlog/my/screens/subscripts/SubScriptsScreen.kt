@@ -25,6 +25,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +63,7 @@ fun SubScriptsScreen(
     val bazaarScriptsRepository = bazaarViewModel.repository
     val context = LocalContext.current
     val scriptsDataHelper = SubScriptsDataHelper(context)
+    var showMenu by remember { mutableStateOf(false) }
 
     // 获取当前用户信息
     val currentUser by userViewModel.currentUser.collectAsState()

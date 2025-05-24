@@ -150,86 +150,86 @@ class EbookImporter(private val context: Context) {
         return ebook
     }
 
-    suspend fun importPdfFile(
-        filePath: String,
-        subScriptId: String,
-        ebookTitle: String,
-        author: String?,
-        databaseName: String
-    ): Ebook? {
-        val file = File(filePath)
-        if (!file.exists()) {
-            Log.e("EbookImporter", "PDF File not found at path: $filePath")
-            throw IOException("PDF File not found at path: $filePath")
-        }
-
-        val fullPdfText: String = try {
-            withContext(Dispatchers.IO) { // Ensure PDFBox operations are off the main thread
-                ""
-            }
-        } catch (e: Exception) {
-            Log.e("EbookImporter", "Error parsing PDF '$filePath': ${e.message}", e)
-            return null // Return null on PDF parsing error
-        }
-
-        if (fullPdfText.isBlank()) {
-            Log.w("EbookImporter", "Extracted text from PDF '$filePath' is blank.")
-            // Optionally, still create an ebook entry with an empty chapter or return null
-            // For now, let's proceed to create an ebook with an empty chapter
-        }
-        
-        val dbHelper = EbookSqliteHelper(context, databaseName)
-        val ebookId = UUID.randomUUID().toString()
-        val currentTime = System.currentTimeMillis()
-
-        val ebook = Ebook(
-            id = ebookId,
-            subScriptId = subScriptId,
-            title = ebookTitle,
-            author = author,
-            filePath = filePath, // Store original PDF file path
-            coverImagePath = null, // Cover handling is separate
-            createdAt = currentTime,
-            lastOpenedAt = currentTime
-        )
-
-        // Create a single chapter for the entire PDF content
-        val chapter = Chapter(
-            id = UUID.randomUUID().toString(),
-            ebookId = ebookId,
-            title = ebookTitle, // Or "Full Document" or similar
-            content = fullPdfText,
-            order = 1
-        )
-
-        // Save Ebook metadata
-        val ebookRowId = dbHelper.addEbook(ebook)
-        if (ebookRowId == -1L) {
-            Log.e("EbookImporter", "Failed to save PDF-based ebook metadata for title: ${ebook.title}")
-            return null
-        }
-        Log.d("EbookImporter", "Successfully inserted PDF-based ebook with ID: ${ebook.id}, rowId: $ebookRowId")
-
-        // Save the single chapter
-        dbHelper.addChapters(listOf(chapter)) // Use addChapters with a list containing one chapter
-        Log.d("EbookImporter", "Inserted single chapter for PDF-based ebook ID: ${ebook.id}")
-
-        // Create and save initial bookmark
-        val bookmark = Bookmark(
-            id = UUID.randomUUID().toString(),
-            ebookId = ebookId,
-            chapterId = chapter.id, // Point to the single chapter
-            pageNumber = 1, // Default to page 1
-            progressPercentage = 0.0f,
-            lastReadAt = currentTime
-        )
-        val bookmarkRowId = dbHelper.addBookmark(bookmark)
-        if (bookmarkRowId == -1L) {
-            Log.w("EbookImporter", "Failed to save initial bookmark for PDF-based ebook ID: ${ebook.id}")
-        } else {
-            Log.d("EbookImporter", "Successfully inserted bookmark for PDF-based ebook ID: ${ebook.id}")
-        }
-
-        return ebook
-    }
+//    suspend fun importPdfFile(
+//        filePath: String,
+//        subScriptId: String,
+//        ebookTitle: String,
+//        author: String?,
+//        databaseName: String
+//    ): Ebook? {
+//        val file = File(filePath)
+//        if (!file.exists()) {
+//            Log.e("EbookImporter", "PDF File not found at path: $filePath")
+//            throw IOException("PDF File not found at path: $filePath")
+//        }
+//
+//        val fullPdfText: String = try {
+//            withContext(Dispatchers.IO) { // Ensure PDFBox operations are off the main thread
+//                ""
+//            }
+//        } catch (e: Exception) {
+//            Log.e("EbookImporter", "Error parsing PDF '$filePath': ${e.message}", e)
+//            return null // Return null on PDF parsing error
+//        }
+//
+//        if (fullPdfText.isBlank()) {
+//            Log.w("EbookImporter", "Extracted text from PDF '$filePath' is blank.")
+//            // Optionally, still create an ebook entry with an empty chapter or return null
+//            // For now, let's proceed to create an ebook with an empty chapter
+//        }
+//        
+//        val dbHelper = EbookSqliteHelper(context, databaseName)
+//        val ebookId = UUID.randomUUID().toString()
+//        val currentTime = System.currentTimeMillis()
+//
+//        val ebook = Ebook(
+//            id = ebookId,
+//            subScriptId = subScriptId,
+//            title = ebookTitle,
+//            author = author,
+//            filePath = filePath, // Store original PDF file path
+//            coverImagePath = null, // Cover handling is separate
+//            createdAt = currentTime,
+//            lastOpenedAt = currentTime
+//        )
+//
+//        // Create a single chapter for the entire PDF content
+//        val chapter = Chapter(
+//            id = UUID.randomUUID().toString(),
+//            ebookId = ebookId,
+//            title = ebookTitle, // Or "Full Document" or similar
+//            content = fullPdfText,
+//            order = 1
+//        )
+//
+//        // Save Ebook metadata
+//        val ebookRowId = dbHelper.addEbook(ebook)
+//        if (ebookRowId == -1L) {
+//            Log.e("EbookImporter", "Failed to save PDF-based ebook metadata for title: ${ebook.title}")
+//            return null
+//        }
+//        Log.d("EbookImporter", "Successfully inserted PDF-based ebook with ID: ${ebook.id}, rowId: $ebookRowId")
+//
+//        // Save the single chapter
+//        dbHelper.addChapters(listOf(chapter)) // Use addChapters with a list containing one chapter
+//        Log.d("EbookImporter", "Inserted single chapter for PDF-based ebook ID: ${ebook.id}")
+//
+//        // Create and save initial bookmark
+//        val bookmark = Bookmark(
+//            id = UUID.randomUUID().toString(),
+//            ebookId = ebookId,
+//            chapterId = chapter.id, // Point to the single chapter
+//            pageNumber = 1, // Default to page 1
+//            progressPercentage = 0.0f,
+//            lastReadAt = currentTime
+//        )
+//        val bookmarkRowId = dbHelper.addBookmark(bookmark)
+//        if (bookmarkRowId == -1L) {
+//            Log.w("EbookImporter", "Failed to save initial bookmark for PDF-based ebook ID: ${ebook.id}")
+//        } else {
+//            Log.d("EbookImporter", "Successfully inserted bookmark for PDF-based ebook ID: ${ebook.id}")
+//        }
+//
+//        return ebook
+//    }
 }

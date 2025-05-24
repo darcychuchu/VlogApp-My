@@ -66,64 +66,21 @@ fun AddVideoScreen(
                 label = { Text("Video Title") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                enabled = uiState.selectedVideoUri != null && (uiState.processingStatus == ProcessingStatus.IDLE || uiState.processingStatus == ProcessingStatus.ESTIMATING_SIZE)
+                enabled = uiState.selectedVideoUri != null && uiState.processingStatus == ProcessingStatus.IDLE
             )
 
-
-            Text("Compression Options:", style = MaterialTheme.typography.titleMedium)
-
-            var expanded by remember { mutableStateOf(false) }
-
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = {
-                    if (uiState.processingStatus == ProcessingStatus.IDLE || uiState.processingStatus == ProcessingStatus.ESTIMATING_SIZE) {
-                        expanded = !expanded
-                    }
-                }
-            ) {
-                OutlinedTextField(
-                    value = uiState.selectedCompressionOption,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Resolution") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                     enabled = uiState.selectedVideoUri != null && (uiState.processingStatus == ProcessingStatus.IDLE || uiState.processingStatus == ProcessingStatus.ESTIMATING_SIZE)
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    uiState.compressionOptions.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option) },
-                            onClick = {
-                                viewModel.setSelectedCompressionOption(option)
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Text("Estimated compressed size: ${uiState.estimatedSize}")
             uiState.finalSize?.let {
-                Text("Final size: $it", style = MaterialTheme.typography.labelMedium)
+                Text("Final size: $it (Original Video)", style = MaterialTheme.typography.labelMedium)
             }
 
-
-            if (uiState.processingStatus == ProcessingStatus.COMPRESSING ||
-                uiState.processingStatus == ProcessingStatus.STORING ||
-                uiState.processingStatus == ProcessingStatus.ESTIMATING_SIZE) {
+            if (uiState.processingStatus == ProcessingStatus.STORING || uiState.processingStatus == ProcessingStatus.ESTIMATING_SIZE) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
                         when(uiState.processingStatus) {
-                            ProcessingStatus.ESTIMATING_SIZE -> "Estimating size..."
-                            ProcessingStatus.COMPRESSING -> "Compressing video..."
+                            ProcessingStatus.ESTIMATING_SIZE -> "Reading file..."
                             ProcessingStatus.STORING -> "Saving video..."
-                            else -> ""
+                            else -> "" // Should not happen if condition is met
                         }
                     )
                 }
@@ -148,7 +105,7 @@ fun AddVideoScreen(
                               (uiState.processingStatus == ProcessingStatus.IDLE || uiState.processingStatus == ProcessingStatus.ERROR) &&
                               uiState.videoTitle.isNotBlank()
                 ) {
-                    Text("Upload and Process Video")
+                    Text("Save Video")
                 }
             }
         }
