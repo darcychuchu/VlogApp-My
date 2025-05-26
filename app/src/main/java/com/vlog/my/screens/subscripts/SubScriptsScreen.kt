@@ -17,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +64,8 @@ fun SubScriptsScreen(
     val bazaarViewModel: BazaarScriptsViewModel = hiltViewModel()
     val bazaarScriptsRepository = bazaarViewModel.repository
     val context = LocalContext.current
+    // Define the route for ConfigsScreen. Ideally, this would be in a central NavGraph file.
+    val CONFIGS_SCREEN_ROUTE = "configs_screen" 
     val scriptsDataHelper = SubScriptsDataHelper(context)
     var showMenu by remember { mutableStateOf(false) }
 
@@ -211,9 +214,19 @@ fun SubScriptsScreen(
                     onClick = {
                         // 导航到添加API配置页面
                         navController?.navigate("script_add")
-                    }
+                    },
+                    modifier = Modifier.padding(bottom = 8.dp) // Add some spacing between FABs
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "添加API配置")
+                }
+
+                // 新增: FAB导航到ConfigsScreen
+                FloatingActionButton(
+                    onClick = {
+                        navController?.navigate(CONFIGS_SCREEN_ROUTE)
+                    }
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = "打开配置页面")
                 }
             }
         }
