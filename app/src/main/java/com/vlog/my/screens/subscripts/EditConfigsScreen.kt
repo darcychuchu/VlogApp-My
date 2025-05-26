@@ -16,6 +16,154 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
+import com.vlog.my.data.scripts.configs.MetasConfig // Needed for EditableMetaItem
+import java.util.UUID // Needed for EditableMetaItem default clientSideId
+
+// --- Start of Duplicated/Shared Composables from AddConfigsScreen ---
+// In a real project, these would be in a shared UI components file.
+
+@Composable
+fun RecursiveMetasConfigView(
+    label: String,
+    metaItemList: MutableList<EditableMetaItem>,
+    viewModel: EditConfigsViewModel, // Changed to EditConfigsViewModel
+    targetListType: String, // "basic" or "field"
+    level: Int = 0
+    // parentClientSideId is implicitly handled by adding to item.children
+) {
+    Column(modifier = Modifier.padding(start = (level * 16).dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = if (level == 0) label else "Child Metas",
+                style = if (level == 0) MaterialTheme.typography.subtitle1 else MaterialTheme.typography.subtitle2,
+                modifier = Modifier.weight(1f)
+            )
+            if (level == 0) {
+                IconButton(onClick = {
+                    val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
+                    viewModel.addMetaItem(list, null) {
+                        // For EditViewModel, quoteId should come from existing config context
+                        if (targetListType == "basic") viewModel.basicId.value
+                        else viewModel.fieldId.value ?: UUID.randomUUID().toString() // Fallback if fieldId is new
+                    }
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Root Meta for $label")
+                }
+            }
+        }
+
+        metaItemList.forEach { item ->
+            EditableMetaItemView(
+                editableMetaItem = item,
+                viewModel = viewModel,
+                allBasicMetas = viewModel.basicEditableMetas,
+                allFieldMetas = viewModel.fieldEditableMetas,
+                level = level
+            ) {
+                // Add child to current item
+                val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
+                viewModel.addMetaItem(list, item.clientSideId) { item.metasConfig.quoteId }
+            }
+        }
+        if (metaItemList.isEmpty() && level > 0) {
+             Text("No child metas.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+        }
+         if (metaItemList.isEmpty() && level == 0) {
+            Text("No metas added for $label.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+        }
+    }
+}
+
+@Composable
+fun EditableMetaItemView(
+    editableMetaItem: EditableMetaItem,
+    viewModel: EditConfigsViewModel, // Changed to EditConfigsViewModel
+    allBasicMetas: MutableList<EditableMetaItem>,
+    allFieldMetas: MutableList<EditableMetaItem>,
+    level: Int,
+    onAddChild: () -> Unit
+) {
+    var metaKey by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaKey) { mutableStateOf(editableMetaItem.metasConfig.metaKey ?: "") }
+    var metaValue by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaValue) { mutableStateOf(editableMetaItem.metasConfig.metaValue ?: "") }
+    var metaTyped by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaTyped) { mutableStateOf((editableMetaItem.metasConfig.metaTyped ?: 0).toString()) }
+
+    // Determine which root list this item (or its ancestor) belongs to for property updates
+    val rootListForUpdate = if (allBasicMetas.any { findEditableMetaRecursive(mutableListOf(it), editableMetaItem.clientSideId) != null }) {
+        allBasicMetas
+    } else if (allFieldMetas.any { findEditableMetaRecursive(mutableListOf(it), editableMetaItem.clientSideId) != null }) {
+        allFieldMetas
+    } else {
+        // Fallback or error, though should always be found in one if called correctly
+        allBasicMetas // Defaulting, but ideally this case shouldn't be hit
+    }
+
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = (level * 4).dp), elevation = (2+level).dp) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            ConfigTextField(
+                label = "Meta Key", value = metaKey,
+                onValueChange = {
+                    metaKey = it
+                    viewModel.updateMetaItemProperties(rootListForUpdate, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            ConfigTextField(
+                label = "Meta Value", value = metaValue,
+                onValueChange = {
+                    metaValue = it
+                    viewModel.updateMetaItemProperties(rootListForUpdate, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            ConfigTextField(
+                label = "Meta Type (Int)", value = metaTyped, keyboardType = KeyboardType.Number,
+                onValueChange = {
+                    metaTyped = it
+                    viewModel.updateMetaItemProperties(rootListForUpdate, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onAddChild) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Child Meta", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add Child")
+                }
+                IconButton(onClick = {
+                    if (!viewModel.removeMetaItem(allBasicMetas, editableMetaItem.clientSideId)) {
+                        viewModel.removeMetaItem(allFieldMetas, editableMetaItem.clientSideId)
+                    }
+                }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Remove This Meta")
+                }
+            }
+            if (editableMetaItem.children.isNotEmpty()) {
+                 RecursiveMetasConfigView(
+                    label = "Child Metas",
+                    metaItemList = editableMetaItem.children,
+                    viewModel = viewModel,
+                    targetListType = if (rootListForUpdate === viewModel.basicEditableMetas) "basic" else "field",
+                    level = level + 1
+                )
+            }
+        }
+    }
+}
+// Helper function to find an EditableMetaItem recursively (needed by EditableMetaItemView for context)
+private fun findEditableMetaRecursive(searchList: MutableList<EditableMetaItem>, clientSideId: String): EditableMetaItem? {
+    for (item in searchList) {
+        if (item.clientSideId == clientSideId) {
+            return item
+        }
+        val foundInChildren = findEditableMetaRecursive(item.children, clientSideId)
+        if (foundInChildren != null) {
+            return foundInChildren
+        }
+    }
+    return null
+}
+
+
+// --- End of Duplicated/Shared Composables ---
+
 
 @Composable
 fun EditConfigsScreen(
@@ -85,9 +233,8 @@ fun EditConfigsScreen(
                             Text("Fields Configuration", style = MaterialTheme.typography.h6, modifier = Modifier.weight(1f))
                             Checkbox(checked = viewModel.hasFieldsConfig.value, onCheckedChange = {
                                 viewModel.hasFieldsConfig.value = it
-                                // If toggling off, you might want to clear fields or handle data retention logic in ViewModel
                                 if (!it) {
-                                    viewModel.fieldId.value = null // Clear fieldId if disabled
+                                    viewModel.fieldId.value = null 
                                 }
                             })
                             Text("Enable FieldsConfig")
@@ -106,14 +253,28 @@ fun EditConfigsScreen(
                         item { ConfigTextField(label = "Source URL Field (Optional)", value = viewModel.sourceUrlField.value, onValueChange = { viewModel.sourceUrlField.value = it }) }
                     }
 
-                    // Basic Metas
+                    // Basic Metas - Use RecursiveMetasConfigView
                     item { SectionSpacer() }
-                    item { MetaListEditor("Basic Metas (Optional)", viewModel.basicMetas, onAdd = { viewModel.addBasicMeta() }, onRemove = { viewModel.removeBasicMeta(it) }) }
+                    item {
+                        RecursiveMetasConfigView(
+                            label = "Basic Metas (Optional)",
+                            metaItemList = viewModel.basicEditableMetas,
+                            viewModel = viewModel,
+                            targetListType = "basic"
+                        )
+                    }
 
-                    // Field Metas (only if FieldsConfig is enabled)
+                    // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
                     if (viewModel.hasFieldsConfig.value) {
                         item { SectionSpacer() }
-                        item { MetaListEditor("Field Metas (Optional)", viewModel.fieldMetas, onAdd = { viewModel.addFieldMeta() }, onRemove = { viewModel.removeFieldMeta(it) }) }
+                        item {
+                            RecursiveMetasConfigView(
+                                label = "Field Metas (Optional)",
+                                metaItemList = viewModel.fieldEditableMetas,
+                                viewModel = viewModel,
+                                targetListType = "field"
+                            )
+                        }
                     }
 
                     item { SectionSpacer() }

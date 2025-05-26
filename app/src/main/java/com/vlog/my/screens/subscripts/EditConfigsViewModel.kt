@@ -17,20 +17,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-// UIMetasConfig from AddConfigsViewModel can be reused or defined here if different
-// For simplicity, let's assume it's similar. If not already in a shared file, define it:
-// data class UIMetasConfig(
-//     val existingMetaId: String? = null, // To track existing metas for update
-//     val id: String = UUID.randomUUID().toString(), // For list key in UI
-//     var metaTyped: Int = 0,
-//     var metaKey: String = "",
-//     var metaValue: String = ""
-// )
-// Using the one from AddConfigsViewModel for consistency:
-// import com.vlog.my.screens.subscripts.UIMetasConfig
+// Re-using EditableMetaItem from AddConfigsViewModel.kt (assuming it's accessible or moved to a shared location)
+// If not, it needs to be defined here or imported.
+// For this context, we assume EditableMetaItem is available.
 
 class EditConfigsViewModel(
-    application: Application,
+    private val application: Application, // Added private val for context access
     private val basicIdToEdit: String
 ) : ViewModel() {
 
@@ -50,7 +42,7 @@ class EditConfigsViewModel(
     val urlParamsField = mutableStateOf("")
     val urlTypedField = mutableStateOf(0)
     val rootPath = mutableStateOf("")
-    val basicMetas = mutableStateListOf<UIMetasConfig>()
+    val basicEditableMetas = mutableStateListOf<EditableMetaItem>()
 
     // FieldsConfig fields
     val hasFieldsConfig = mutableStateOf(false)
@@ -61,7 +53,7 @@ class EditConfigsViewModel(
     val contentField = mutableStateOf("")
     val tagsField = mutableStateOf("")
     val sourceUrlField = mutableStateOf("")
-    val fieldMetas = mutableStateListOf<UIMetasConfig>()
+    val fieldEditableMetas = mutableStateListOf<EditableMetaItem>()
 
     // Validation errors
     val apiUrlError = mutableStateOf<String?>(null)
@@ -75,6 +67,19 @@ class EditConfigsViewModel(
     init {
         loadConfig()
     }
+    
+    // Recursive function to convert MetasConfig hierarchy to EditableMetaItem hierarchy
+    private fun convertToEditableMetaItems(metas: List<MetasConfig>?): MutableList<EditableMetaItem> {
+        if (metas == null) return mutableStateListOf()
+        return metas.map { meta ->
+            EditableMetaItem(
+                clientSideId = UUID.randomUUID().toString(), // Fresh clientSideId for UI
+                metasConfig = meta, // metaId here is the DB ID
+                children = convertToEditableMetaItems(meta.metaList)
+            )
+        }.toMutableStateList()
+    }
+
 
     private fun loadConfig() {
         viewModelScope.launch {
@@ -90,17 +95,15 @@ class EditConfigsViewModel(
             urlParamsField.value = config.urlParamsField ?: ""
             urlTypedField.value = config.urlTypedField
             rootPath.value = config.rootPath
-            // scriptsId is already hardcoded
+            // scriptsId is already hardcoded and non-editable.
 
-            basicMetas.clear()
-            config.metaList?.forEach { meta ->
-                basicMetas.add(UIMetasConfig(id = meta.metaId, metaTyped = meta.metaTyped ?: 0, metaKey = meta.metaKey ?: "", metaValue = meta.metaValue ?: ""))
-            }
+            basicEditableMetas.clear()
+            basicEditableMetas.addAll(convertToEditableMetaItems(config.metaList))
 
             if (config.fieldsConfig != null) {
                 hasFieldsConfig.value = true
                 val fc = config.fieldsConfig
-                fieldId.value = fc.fieldId // Store existing fieldId
+                fieldId.value = fc.fieldId 
                 idField.value = fc.idField
                 titleField.value = fc.titleField
                 picField.value = fc.picField ?: ""
@@ -108,32 +111,79 @@ class EditConfigsViewModel(
                 tagsField.value = fc.tagsField ?: ""
                 sourceUrlField.value = fc.sourceUrlField ?: ""
 
-                fieldMetas.clear()
-                fc.metaList?.forEach { meta ->
-                    fieldMetas.add(UIMetasConfig(id = meta.metaId, metaTyped = meta.metaTyped ?: 0, metaKey = meta.metaKey ?: "", metaValue = meta.metaValue ?: ""))
-                }
+                fieldEditableMetas.clear()
+                fieldEditableMetas.addAll(convertToEditableMetaItems(fc.metaList))
             } else {
                 hasFieldsConfig.value = false
+                fieldId.value = null
+                fieldEditableMetas.clear()
             }
             _isLoading.value = false
         }
     }
 
-    fun addBasicMeta() {
-        basicMetas.add(UIMetasConfig(id = UUID.randomUUID().toString())) // New meta gets a new temp UI ID
+    // --- EditableMetaItem Management (similar to AddConfigsViewModel) ---
+    // These can be inherited from a base ViewModel if structure becomes complex
+    private fun findEditableMetaRecursive(searchList: MutableList<EditableMetaItem>, clientSideId: String): EditableMetaItem? {
+        for (item in searchList) {
+            if (item.clientSideId == clientSideId) {
+                return item
+            }
+            val foundInChildren = findEditableMetaRecursive(item.children, clientSideId)
+            if (foundInChildren != null) {
+                return foundInChildren
+            }
+        }
+        return null
     }
 
-    fun removeBasicMeta(item: UIMetasConfig) {
-        basicMetas.remove(item)
+    fun addMetaItem(targetList: MutableList<EditableMetaItem>, parentClientSideId: String?, quoteIdProducer: () -> String) {
+        val newItem = EditableMetaItem(
+            metasConfig = MetasConfig(
+                metaId = UUID.randomUUID().toString(), // New DB metaId
+                quoteId = quoteIdProducer(), 
+                metaKey = "", metaValue = "", metaTyped = 0
+            )
+        )
+        if (parentClientSideId == null) {
+            targetList.add(newItem)
+        } else {
+            val parentItem = findEditableMetaRecursive(targetList, parentClientSideId)
+            parentItem?.children?.add(newItem.apply { this.parentClientSideId = parentClientSideId })
+        }
+    }
+    
+    fun removeMetaItem(targetList: MutableList<EditableMetaItem>, itemToRemoveClientSideId: String): Boolean {
+        val iterator = targetList.iterator()
+        while (iterator.hasNext()) {
+            val item = iterator.next()
+            if (item.clientSideId == itemToRemoveClientSideId) {
+                iterator.remove()
+                return true
+            }
+            if (removeMetaItem(item.children, itemToRemoveClientSideId)) {
+                return true
+            }
+        }
+        return false
     }
 
-    fun addFieldMeta() {
-        fieldMetas.add(UIMetasConfig(id = UUID.randomUUID().toString())) // New meta gets a new temp UI ID
+    fun updateMetaItemProperties(
+        targetList: MutableList<EditableMetaItem>,
+        clientSideId: String,
+        newKey: String,
+        newValue: String,
+        newType: Int
+    ) {
+        findEditableMetaRecursive(targetList, clientSideId)?.let { item ->
+            item.metasConfig = item.metasConfig.copy(
+                metaKey = newKey.ifBlank { null },
+                metaValue = newValue.ifBlank { null },
+                metaTyped = newType
+            )
+        }
     }
-
-    fun removeFieldMeta(item: UIMetasConfig) {
-        fieldMetas.remove(item)
-    }
+    // --- End EditableMetaItem Management ---
 
     private fun validateInputs(): Boolean {
         var isValid = true
@@ -157,33 +207,30 @@ class EditConfigsViewModel(
 
         viewModelScope.launch {
             try {
-                val currentBasicId = basicId.value // This is the ID of the config being edited
+                val currentBasicId = basicId.value 
 
-                val finalBasicMetas = basicMetas.map { uiMeta ->
-                    MetasConfig(
-                        metaId = if (dbHelper.getMetasConfigByQuoteId(currentBasicId).any { it.metaId == uiMeta.id }) uiMeta.id else UUID.randomUUID().toString(),
-                        quoteId = currentBasicId,
-                        metaTyped = uiMeta.metaTyped,
-                        metaKey = uiMeta.metaKey.ifBlank { null },
-                        metaValue = uiMeta.metaValue.ifBlank { null }
-                    )
-                }.toMutableList()
-
-                var finalFieldsConfig: FieldsConfig? = null
-                if (hasFieldsConfig.value) {
-                    val currentFieldId = fieldId.value ?: UUID.randomUUID().toString() // Use existing or generate new if it was toggled on
-                     if (fieldId.value == null) fieldId.value = currentFieldId // Persist newly generated ID if it was toggled
-
-                    val finalFieldMetas = fieldMetas.map { uiMeta ->
-                        MetasConfig(
-                            metaId = if (dbHelper.getMetasConfigByQuoteId(currentFieldId).any { it.metaId == uiMeta.id }) uiMeta.id else UUID.randomUUID().toString(),
-                            quoteId = currentFieldId,
-                            metaTyped = uiMeta.metaTyped,
-                            metaKey = uiMeta.metaKey.ifBlank { null },
-                            metaValue = uiMeta.metaValue.ifBlank { null }
+                // Recursive function to convert EditableMetaItem hierarchy back to MetasConfig hierarchy for saving
+                // This ensures that existing metaIds are preserved if the meta was loaded from DB.
+                // New metas will have UUIDs generated when EditableMetaItem was created.
+                fun convertToMetasConfigForSave(editableItems: List<EditableMetaItem>, quoteId: String): MutableList<MetasConfig>? {
+                    if (editableItems.isEmpty()) return null
+                    return editableItems.map { editableItem ->
+                        editableItem.metasConfig.copy( // metasConfig.metaId is the key part here
+                            quoteId = quoteId,
+                            metaList = convertToMetasConfigForSave(editableItem.children, quoteId)
                         )
                     }.toMutableList()
+                }
 
+                val finalBasicMetas = convertToMetasConfigForSave(basicEditableMetas, currentBasicId)
+                
+                var finalFieldsConfig: FieldsConfig? = null
+                if (hasFieldsConfig.value) {
+                    val currentFieldId = fieldId.value ?: UUID.randomUUID().toString() 
+                    if (fieldId.value == null) { // If FieldsConfig was toggled on during edit
+                        fieldId.value = currentFieldId 
+                    }
+                    val finalFieldMetas = convertToMetasConfigForSave(fieldEditableMetas, currentFieldId)
                     finalFieldsConfig = FieldsConfig(
                         fieldId = currentFieldId,
                         quoteId = currentFieldId, 
@@ -195,16 +242,22 @@ class EditConfigsViewModel(
                         sourceUrlField = sourceUrlField.value.ifBlank { null },
                         metaList = finalFieldMetas
                     )
+                } else {
+                    // If hasFieldsConfig is false, ensure we remove any existing FieldsConfig
+                    // The updateBasicConfig in ConfigsDataHelper handles setting fieldId_fk to null
+                    // and should also delete the orphaned FieldsConfig if it was previously associated.
+                    // For safety, we could explicitly try to delete fieldId.value if it's not null.
+                    // However, ConfigsDataHelper.updateBasicConfig should manage this based on null fieldsConfig.
                 }
 
                 val updatedConfig = BasicsConfig(
                     basicId = currentBasicId,
-                    scriptsId = scriptsId.value, // Hardcoded
+                    scriptsId = scriptsId.value, // Hardcoded, non-editable
                     apiUrlField = apiUrlField.value,
                     urlParamsField = urlParamsField.value.ifBlank { null },
                     urlTypedField = urlTypedField.value,
                     rootPath = rootPath.value,
-                    metaList = finalBasicMetas,
+                    metaList = finalBasicMetas, // Recursively structured
                     fieldsConfig = finalFieldsConfig
                 )
                 

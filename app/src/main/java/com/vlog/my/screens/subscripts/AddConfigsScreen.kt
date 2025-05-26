@@ -15,8 +15,145 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.vlog.my.data.scripts.configs.MetasConfig
+// MetasConfig is still needed by EditableMetaItem
+import com.vlog.my.data.scripts.configs.MetasConfig 
 import kotlinx.coroutines.flow.collectLatest
+
+// Define RecursiveMetasConfigView and its helper MetaItemView here or in a shared UI file
+@Composable
+fun RecursiveMetasConfigView(
+    label: String,
+    metaItemList: MutableList<EditableMetaItem>,
+    viewModel: AddConfigsViewModel, // Or a common interface/base ViewModel
+    targetListType: String, // "basic" or "field" to call correct ViewModel methods
+    level: Int = 0,
+    parentClientSideId: String? = null // To add new items to the correct parent
+) {
+    Column(modifier = Modifier.padding(start = (level * 16).dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = if (level == 0) label else "Child Metas",
+                style = if (level == 0) MaterialTheme.typography.subtitle1 else MaterialTheme.typography.subtitle2,
+                modifier = Modifier.weight(1f)
+            )
+            if (level == 0) { // Only allow adding root items from the main section header
+                IconButton(onClick = {
+                    val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
+                    viewModel.addMetaItem(list, null) {
+                        if (targetListType == "basic") viewModel.basicId.value ?: UUID.randomUUID().toString() // Placeholder if basicId not set
+                        else viewModel.fieldId.value ?: UUID.randomUUID().toString() // Placeholder if fieldId not set
+                    }
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Root Meta for $label")
+                }
+            }
+        }
+
+        metaItemList.forEach { item ->
+            EditableMetaItemView(
+                editableMetaItem = item,
+                viewModel = viewModel,
+                targetList = metaItemList, // Pass the current list for removal context
+                allBasicMetas = viewModel.basicEditableMetas, // For removing from the correct root list
+                allFieldMetas = viewModel.fieldEditableMetas, // For removing from the correct root list
+                level = level
+            ) {
+                // This lambda is for adding a child to the current item
+                val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
+                viewModel.addMetaItem(list, item.clientSideId) { item.metasConfig.quoteId }
+            }
+        }
+        if (metaItemList.isEmpty() && level > 0) { // Only show "No child metas" for children lists
+             Text("No child metas.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+        }
+         if (metaItemList.isEmpty() && level == 0) {
+            Text("No metas added for $label.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+        }
+    }
+}
+
+@Composable
+fun EditableMetaItemView(
+    editableMetaItem: EditableMetaItem,
+    viewModel: AddConfigsViewModel, // Or common interface
+    targetList: MutableList<EditableMetaItem>, // The list this item directly belongs to (for removal from its direct parent)
+    allBasicMetas: MutableList<EditableMetaItem>, // Reference to root basic metas for removal
+    allFieldMetas: MutableList<EditableMetaItem>, // Reference to root field metas for removal
+    level: Int,
+    onAddChild: () -> Unit
+) {
+    // Local states for text fields to avoid direct modification of MetasConfig in EditableMetaItem
+    // This allows for debouncing or explicit save actions if needed, though here we update ViewModel directly.
+    var metaKey by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaKey) { mutableStateOf(editableMetaItem.metasConfig.metaKey ?: "") }
+    var metaValue by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaValue) { mutableStateOf(editableMetaItem.metasConfig.metaValue ?: "") }
+    var metaTyped by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaTyped) { mutableStateOf((editableMetaItem.metasConfig.metaTyped ?: 0).toString()) }
+
+    val listToSearchForRemove = if (targetList === allBasicMetas || allBasicMetas.any { it === targetList.firstOrNull()?.let { findParent(allBasicMetas, it.clientSideId) } }) allBasicMetas else allFieldMetas
+
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = (level * 4).dp), elevation = (2+level).dp) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            ConfigTextField(
+                label = "Meta Key", value = metaKey,
+                onValueChange = {
+                    metaKey = it
+                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            ConfigTextField(
+                label = "Meta Value", value = metaValue,
+                onValueChange = {
+                    metaValue = it
+                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            ConfigTextField(
+                label = "Meta Type (Int)", value = metaTyped, keyboardType = KeyboardType.Number,
+                onValueChange = {
+                    metaTyped = it
+                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                }
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onAddChild) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add Child Meta", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add Child")
+                }
+                IconButton(onClick = {
+                    // Determine which root list to use for removal
+                     if (!viewModel.removeMetaItem(allBasicMetas, editableMetaItem.clientSideId)) {
+                        viewModel.removeMetaItem(allFieldMetas, editableMetaItem.clientSideId)
+                    }
+                }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Remove This Meta")
+                }
+            }
+            // Recursive call for children
+            if (editableMetaItem.children.isNotEmpty()) {
+                 RecursiveMetasConfigView(
+                    label = "Child Metas", // Not displayed if level > 0
+                    metaItemList = editableMetaItem.children,
+                    viewModel = viewModel,
+                    targetListType = if (listToSearchForRemove === viewModel.basicEditableMetas) "basic" else "field",
+                    level = level + 1,
+                    parentClientSideId = editableMetaItem.clientSideId
+                )
+            }
+        }
+    }
+}
+
+// Helper to find parent for removal, not strictly necessary if viewmodel handles search from root.
+fun findParent(rootList: MutableList<EditableMetaItem>, childClientSideId: String): EditableMetaItem? {
+    for (item in rootList) {
+        if (item.children.any { it.clientSideId == childClientSideId }) return item
+        val parentInChild = findParent(item.children, childClientSideId)
+        if (parentInChild != null) return parentInChild
+    }
+    return null
+}
+
 
 @Composable
 fun AddConfigsScreen(
