@@ -11,8 +11,8 @@ package com.vlog.my.data.scripts.configs
 data class MetasConfig(
     val metaId: String,
     val quoteId: String,
-    val metaTyped: Int? = 0,
-    val metaKey: String? = null,
-    val metaValue: String? = null,
+    var metaTyped: Int? = 0,
+    var metaKey: String? = null,
+    var metaValue: String? = null,
     val metaList: MutableList<MetasConfig>? = null
 )

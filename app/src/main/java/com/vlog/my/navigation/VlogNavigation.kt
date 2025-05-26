@@ -28,8 +28,11 @@ import com.vlog.my.screens.scripts.articles.ItemDetailScreen
 import com.vlog.my.screens.home.HomeScreen
 import com.vlog.my.screens.profile.ProfileScreen
 import com.vlog.my.screens.scripts.articles.ItemListScreen
+import com.vlog.my.screens.subscripts.AddConfigsScreen
 import com.vlog.my.screens.subscripts.workers.WorkersScreen
 import com.vlog.my.screens.subscripts.AddSubScriptsScreen
+import com.vlog.my.screens.subscripts.ConfigsScreen
+import com.vlog.my.screens.subscripts.EditConfigsScreen
 import com.vlog.my.screens.subscripts.EditSubScriptsScreen
 import com.vlog.my.screens.subscripts.SubScriptsScreen
 import com.vlog.my.screens.users.LoginScreen
@@ -53,6 +56,21 @@ sealed class Screen(val route: String) {
     object Workers : Screen("workers/{scriptId}") {
         fun createRoute(scriptId: String): String = "workers/$scriptId"
     }
+
+
+
+    object ConfigList : Screen("config_list") {
+        fun createRoute(): String = "config_list"
+    }
+
+    object ConfigAdd : Screen("config_add") {
+        fun createRoute(): String = "config_add"
+    }
+
+    object ConfigEdit : Screen("config_edit/{basicId}") {
+        fun createRoute(basicId: String): String = "config_edit/$basicId"
+    }
+
 
     object ScriptList : Screen("script_list") {
         fun createRoute(): String = "script_list"
@@ -272,6 +290,60 @@ fun VlogNavigation() {
                     scriptId = scriptId
                 )
             }
+
+
+
+
+
+
+
+
+
+
+
+            composable(Screen.ConfigList.route) {
+                ConfigsScreen(
+                    navController = navController
+                )
+            }
+            composable(Screen.ConfigAdd.route) {
+                AddConfigsScreen(
+                    navController = navController
+                )
+            }
+
+            composable(
+                route = Screen.ConfigEdit.route,
+                arguments = listOf(navArgument("basicId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val basicId = backStackEntry.arguments?.getString("basicId") ?: ""
+                EditConfigsScreen(
+                    navController = navController,
+                    basicId = basicId
+                )
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             composable(
                 route = Screen.ItemList.route,
