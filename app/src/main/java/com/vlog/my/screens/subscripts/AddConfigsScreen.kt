@@ -40,8 +40,11 @@ fun RecursiveMetasConfigView(
                 IconButton(onClick = {
                     val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
                     viewModel.addMetaItem(list, null) {
-                        if (targetListType == "basic") viewModel.basicId.value ?: UUID.randomUUID().toString() // Placeholder if basicId not set
-                        else viewModel.fieldId.value ?: UUID.randomUUID().toString() // Placeholder if fieldId not set
+                        // For new items in Add screen, quoteId will be properly set during saveConfig.
+                        // Provide a temporary unique ID for now, e.g., the metaId of the new item.
+                        // The addMetaItem in ViewModel generates a new metaId for MetasConfig.
+                        // Let's use a temporary UUID string here.
+                        UUID.randomUUID().toString() 
                     }
                 }) {
                     Icon(Icons.Filled.Add, contentDescription = "Add Root Meta for $label")
@@ -53,17 +56,19 @@ fun RecursiveMetasConfigView(
             EditableMetaItemView(
                 editableMetaItem = item,
                 viewModel = viewModel,
-                targetList = metaItemList, // Pass the current list for removal context
-                allBasicMetas = viewModel.basicEditableMetas, // For removing from the correct root list
-                allFieldMetas = viewModel.fieldEditableMetas, // For removing from the correct root list
-                level = level
+                // targetList parameter removed from EditableMetaItemView call, not needed by it directly
+                allBasicMetas = viewModel.basicEditableMetas, 
+                allFieldMetas = viewModel.fieldEditableMetas, 
+                level = level,
+                targetListType = targetListType // Pass targetListType for recursive calls
             ) {
                 // This lambda is for adding a child to the current item
-                val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
-                viewModel.addMetaItem(list, item.clientSideId) { item.metasConfig.quoteId }
+                // The list (basicEditableMetas or fieldEditableMetas) is determined by targetListType
+                val listContext = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
+                viewModel.addMetaItem(listContext, item.clientSideId) { item.metasConfig.quoteId } // Child inherits quoteId from parent
             }
         }
-        if (metaItemList.isEmpty() && level > 0) { // Only show "No child metas" for children lists
+        if (metaItemList.isEmpty() && level > 0) { 
              Text("No child metas.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
         }
          if (metaItemList.isEmpty() && level == 0) {
@@ -75,43 +80,41 @@ fun RecursiveMetasConfigView(
 @Composable
 fun EditableMetaItemView(
     editableMetaItem: EditableMetaItem,
-    viewModel: AddConfigsViewModel, // Or common interface
-    targetList: MutableList<EditableMetaItem>, // The list this item directly belongs to (for removal from its direct parent)
-    allBasicMetas: MutableList<EditableMetaItem>, // Reference to root basic metas for removal
-    allFieldMetas: MutableList<EditableMetaItem>, // Reference to root field metas for removal
+    viewModel: AddConfigsViewModel, 
+    allBasicMetas: MutableList<EditableMetaItem>, 
+    allFieldMetas: MutableList<EditableMetaItem>, 
     level: Int,
+    targetListType: String, // Added to know which list to use for recursive calls
     onAddChild: () -> Unit
 ) {
-    // Local states for text fields to avoid direct modification of MetasConfig in EditableMetaItem
-    // This allows for debouncing or explicit save actions if needed, though here we update ViewModel directly.
     var metaKey by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaKey) { mutableStateOf(editableMetaItem.metasConfig.metaKey ?: "") }
     var metaValue by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaValue) { mutableStateOf(editableMetaItem.metasConfig.metaValue ?: "") }
     var metaTyped by remember(editableMetaItem.clientSideId, editableMetaItem.metasConfig.metaTyped) { mutableStateOf((editableMetaItem.metasConfig.metaTyped ?: 0).toString()) }
 
-    val listToSearchForRemove = if (targetList === allBasicMetas || allBasicMetas.any { it === targetList.firstOrNull()?.let { findParent(allBasicMetas, it.clientSideId) } }) allBasicMetas else allFieldMetas
-
-
+    // Determine which root list this item (or its ancestor) belongs to for property updates and removal
+    val rootListForOperations = if (targetListType == "basic") allBasicMetas else allFieldMetas
+    
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = (level * 4).dp), elevation = (2+level).dp) {
         Column(modifier = Modifier.padding(8.dp)) {
             ConfigTextField(
                 label = "Meta Key", value = metaKey,
                 onValueChange = {
                     metaKey = it
-                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                    viewModel.updateMetaItemProperties(rootListForOperations, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
                 }
             )
             ConfigTextField(
                 label = "Meta Value", value = metaValue,
                 onValueChange = {
                     metaValue = it
-                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                    viewModel.updateMetaItemProperties(rootListForOperations, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
                 }
             )
             ConfigTextField(
                 label = "Meta Type (Int)", value = metaTyped, keyboardType = KeyboardType.Number,
                 onValueChange = {
                     metaTyped = it
-                    viewModel.updateMetaItemProperties(listToSearchForRemove, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
+                    viewModel.updateMetaItemProperties(rootListForOperations, editableMetaItem.clientSideId, metaKey, metaValue, metaTyped.toIntOrNull() ?: 0)
                 }
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -121,39 +124,26 @@ fun EditableMetaItemView(
                     Text("Add Child")
                 }
                 IconButton(onClick = {
-                    // Determine which root list to use for removal
-                     if (!viewModel.removeMetaItem(allBasicMetas, editableMetaItem.clientSideId)) {
-                        viewModel.removeMetaItem(allFieldMetas, editableMetaItem.clientSideId)
-                    }
+                    viewModel.removeMetaItem(rootListForOperations, editableMetaItem.clientSideId)
                 }) {
                     Icon(Icons.Filled.Delete, contentDescription = "Remove This Meta")
                 }
             }
-            // Recursive call for children
             if (editableMetaItem.children.isNotEmpty()) {
                  RecursiveMetasConfigView(
-                    label = "Child Metas", // Not displayed if level > 0
+                    label = "Child Metas", 
                     metaItemList = editableMetaItem.children,
                     viewModel = viewModel,
-                    targetListType = if (listToSearchForRemove === viewModel.basicEditableMetas) "basic" else "field",
-                    level = level + 1,
-                    parentClientSideId = editableMetaItem.clientSideId
+                    targetListType = targetListType, // Pass down the same type
+                    level = level + 1
+                    // parentClientSideId for adding children is handled by onAddChild lambda context
                 )
             }
         }
     }
 }
 
-// Helper to find parent for removal, not strictly necessary if viewmodel handles search from root.
-fun findParent(rootList: MutableList<EditableMetaItem>, childClientSideId: String): EditableMetaItem? {
-    for (item in rootList) {
-        if (item.children.any { it.clientSideId == childClientSideId }) return item
-        val parentInChild = findParent(item.children, childClientSideId)
-        if (parentInChild != null) return parentInChild
-    }
-    return null
-}
-
+// Removed findParent as ViewModel's removeMetaItem and updateMetaItemProperties search from root lists.
 
 @Composable
 fun AddConfigsScreen(
