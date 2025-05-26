@@ -1,11 +1,13 @@
 package com.vlog.my
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import com.vlog.my.navigation.VlogNavigation
 import com.vlog.my.ui.theme.VlogAppMyTheme
 import com.vlog.my.utils.StoragePermissionHelper
@@ -16,6 +18,7 @@ class MainActivity : ComponentActivity() {
     // 权限请求启动器
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
     
+    @RequiresApi(Build.VERSION_CODES.R)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

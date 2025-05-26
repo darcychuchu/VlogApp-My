@@ -105,17 +105,43 @@ class MusicTracksViewModel(
     fun prepareTrackForPlayback(track: MusicItem, context: Context) {
         _currentlyPlayingTrackId.value = track.id // Set playing track ID
         val intent = Intent(context, MusicPlaybackService::class.java)
-        if (track.musicData != null) {
+        
+        // 如果musicData为null但有filePath或id，则需要从数据库加载
+        if (track.musicData == null && track.id.isNotEmpty()) {
+            // 从数据库获取完整的MusicItem（包含musicData）
+            val fullTrack = musicScriptDataHelper.getMusicTrack(track.id)
+            
+            if (fullTrack?.musicData != null) {
+                // 使用从数据库获取的musicData
+                val tempFileUri = saveBlobToTempFile(track.id, fullTrack.musicData, context)
+                if (tempFileUri != null) {
+                    intent.action = MusicPlaybackService.ACTION_PREPARE_TRACK
+                    intent.putExtra(MusicPlaybackService.EXTRA_TRACK_URI, tempFileUri.toString())
+                    context.startService(intent)
+                    return
+                } else {
+                    Log.e("MusicTracksViewModel", "Failed to create temp file for track ${track.id}")
+                    _currentlyPlayingTrackId.value = null // Clear if preparation failed
+                    return
+                }
+            }
+        } else if (track.musicData != null) {
+            // 如果已经有musicData，直接使用
             val tempFileUri = saveBlobToTempFile(track.id, track.musicData, context)
             if (tempFileUri != null) {
                 intent.action = MusicPlaybackService.ACTION_PREPARE_TRACK
                 intent.putExtra(MusicPlaybackService.EXTRA_TRACK_URI, tempFileUri.toString())
                 context.startService(intent)
+                return
             } else {
                 Log.e("MusicTracksViewModel", "Failed to create temp file for track ${track.id}")
                 _currentlyPlayingTrackId.value = null // Clear if preparation failed
+                return
             }
-        } else if (!track.url.isNullOrEmpty()) {
+        }
+        
+        // 如果没有musicData但有URL，使用URL
+        if (!track.url.isNullOrEmpty()) {
             intent.action = MusicPlaybackService.ACTION_PREPARE_TRACK
             intent.putExtra(MusicPlaybackService.EXTRA_TRACK_URL, track.url)
             context.startService(intent)

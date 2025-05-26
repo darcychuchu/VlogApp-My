@@ -50,14 +50,9 @@ sealed class Screen(val route: String) {
     object Register : Screen("register")
 
 
-    object Settings : Screen("settings") {
-        fun createRoute(): String = "settings"
-    }
-    
     object Workers : Screen("workers/{scriptId}") {
         fun createRoute(scriptId: String): String = "workers/$scriptId"
     }
-
 
     object ScriptList : Screen("script_list") {
         fun createRoute(): String = "script_list"
@@ -71,17 +66,6 @@ sealed class Screen(val route: String) {
         fun createRoute(scriptId: String): String = "script_edit/$scriptId"
     }
 
-    object ItemList : Screen("item_list/{scriptId}") {
-        fun createRoute(scriptId: String = ""): String = "item_list/$scriptId"
-    }
-
-    object ItemDetail : Screen("item_detail/{scriptId}/{articlesId}") {
-        fun createRoute(scriptId: String, articlesId: String): String = "item_detail/$scriptId/$articlesId"
-    }
-
-
-
-
     object ArticlesList : Screen("articles_list/{scriptId}") {
         fun createRoute(scriptId: String = ""): String = "articles_list/$scriptId"
     }
@@ -90,7 +74,17 @@ sealed class Screen(val route: String) {
         fun createRoute(scriptId: String, articlesId: String): String = "articles_detail/$scriptId/$articlesId"
     }
 
-    
+    object AddArticleScript : Screen("add_article_script") {
+        fun createRoute(): String = "add_article_script"
+    }
+
+
+    object EditArticleScript : Screen("edit_article_script/{scriptId}") {
+        fun createRoute(scriptId: String): String = "edit_article_script/$scriptId"
+    }
+
+
+
     object MappingConfig : Screen("mapping_config/{scriptId}?initialConfig={initialConfig}") {
         fun createRoute(scriptId: String, initialConfig: String = ""): String = "mapping_config/$scriptId?initialConfig=$initialConfig"
     }
@@ -132,11 +126,6 @@ sealed class Screen(val route: String) {
             return "video_player?videoUrl=$encodedUrl"
         }
     }
-
-    object AddArticleScript : Screen("add_article_script") {
-        fun createRoute(): String = "add_article_script"
-    }
-
     object AddMusicScript : Screen("add_music_script") {
         fun createRoute(): String = "add_music_script"
     }
@@ -149,21 +138,33 @@ sealed class Screen(val route: String) {
         fun createRoute(): String = "add_video_script"
     }
 
-    object EditArticleScript : Screen("edit_article_script/{articleId}") {
-        fun createRoute(articleId: String): String = "edit_article_script/$articleId"
+    object EditMusicScript : Screen("edit_music_script/{scriptId}") {
+        fun createRoute(scriptId: String): String = "edit_music_script/$scriptId"
     }
 
-    object EditMusicScript : Screen("edit_music_script/{musicScriptId}") {
-        fun createRoute(musicScriptId: String): String = "edit_music_script/$musicScriptId"
+    object EditEbookScript : Screen("edit_ebook_script/{scriptId}") {
+        fun createRoute(scriptId: String): String = "edit_ebook_script/$scriptId"
     }
 
-    object EditEbookScript : Screen("edit_ebook_script/{ebookScriptId}") {
-        fun createRoute(ebookScriptId: String): String = "edit_ebook_script/$ebookScriptId"
+    object EditVideoScript : Screen("edit_video_script/{scriptId}") {
+        fun createRoute(scriptId: String): String = "edit_video_script/$scriptId"
     }
 
-    object EditVideoScript : Screen("edit_video_script/{videoScriptId}") {
-        fun createRoute(videoScriptId: String): String = "edit_video_script/$videoScriptId"
+
+    object Settings : Screen("settings") {
+        fun createRoute(): String = "settings"
     }
+
+
+
+    object ItemList : Screen("item_list/{scriptId}") {
+        fun createRoute(scriptId: String = ""): String = "item_list/$scriptId"
+    }
+
+    object ItemDetail : Screen("item_detail/{scriptId}/{articlesId}") {
+        fun createRoute(scriptId: String, articlesId: String): String = "item_detail/$scriptId/$articlesId"
+    }
+
 }
 
 @Composable
@@ -475,26 +476,26 @@ val localDataHelper = remember {
 
             composable(
                 route = Screen.EditArticleScript.route,
-                arguments = listOf(navArgument("articleId") { type = NavType.StringType })
+                arguments = listOf(navArgument("scriptId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val articleId = backStackEntry.arguments?.getString("articleId")
-                EditArticleScreen(navController = navController, articleId = articleId)
+                val scriptId = backStackEntry.arguments?.getString("scriptId")
+                EditArticleScreen(navController = navController, scriptId = scriptId)
             }
 
             composable(
                 route = Screen.EditMusicScript.route,
-                arguments = listOf(navArgument("musicScriptId") { type = NavType.StringType })
+                arguments = listOf(navArgument("scriptId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val musicScriptId = backStackEntry.arguments?.getString("musicScriptId")
-                EditMusicScreen(navController = navController, musicScriptId = musicScriptId)
+                val scriptId = backStackEntry.arguments?.getString("scriptId")
+                EditMusicScreen(navController = navController, scriptId = scriptId)
             }
 
             composable(
                 route = Screen.EditVideoScript.route,
-                arguments = listOf(navArgument("videoScriptId") { type = NavType.StringType })
+                arguments = listOf(navArgument("scriptId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val videoScriptId = backStackEntry.arguments?.getString("videoScriptId")
-                EditVideoScriptScreen(navController = navController, videoScriptId = videoScriptId)
+                val scriptId = backStackEntry.arguments?.getString("scriptId")
+                EditVideoScriptScreen(navController = navController, scriptId = scriptId)
             }
 
         }

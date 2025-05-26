@@ -24,7 +24,7 @@ import androidx.navigation.NavController
 @Composable
 fun EditVideoScriptScreen(
     navController: NavController,
-    videoScriptId: String?, 
+    scriptId: String?,
     viewModel: EditVideoScriptViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current

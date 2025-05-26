@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
+import androidx.core.database.sqlite.transaction
 
 class EbookSqliteHelper(context: Context, databaseName: String) :
     SQLiteOpenHelper(context, databaseName, null, DATABASE_VERSION) {
@@ -223,16 +224,15 @@ class EbookSqliteHelper(context: Context, databaseName: String) :
 
     fun addChapters(chapters: List<Chapter>) {
         val db = this.writableDatabase
-        db.beginTransaction()
-        try {
-            for (chapter in chapters) {
-                addChapter(chapter) // Uses the single addChapter method internally
+        db.transaction {
+            try {
+                for (chapter in chapters) {
+                    addChapter(chapter) // Uses the single addChapter method internally
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding chapters in transaction", e)
+            } finally {
             }
-            db.setTransactionSuccessful()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error adding chapters in transaction", e)
-        } finally {
-            db.endTransaction()
         }
     }
 

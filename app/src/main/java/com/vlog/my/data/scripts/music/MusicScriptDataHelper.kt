@@ -78,12 +78,23 @@ class MusicScriptDataHelper(context: Context, databaseName: String) :
     fun getAllMusicTracks(): List<MusicItem> {
         val musicTracks = mutableListOf<MusicItem>()
         val db = this.readableDatabase
-        val cursor: Cursor? = db.rawQuery("SELECT * FROM $TABLE_MUSIC_TRACKS", null)
+        // 修改查询，排除BLOB数据列，避免SQLiteBlobTooBigException
+        val cursor: Cursor? = db.rawQuery("SELECT $COLUMN_ID, $COLUMN_TITLE, $COLUMN_ARTIST, $COLUMN_ALBUM, $COLUMN_FILE_PATH, $COLUMN_URL FROM $TABLE_MUSIC_TRACKS", null)
 
         cursor?.use {
             if (it.moveToFirst()) {
                 do {
-                    musicTracks.add(cursorToMusicItem(it))
+                    // 不包含musicData的MusicItem
+                    val musicItem = MusicItem(
+                        id = it.getString(it.getColumnIndexOrThrow(COLUMN_ID)),
+                        title = it.getString(it.getColumnIndexOrThrow(COLUMN_TITLE)),
+                        artist = it.getString(it.getColumnIndexOrThrow(COLUMN_ARTIST)),
+                        album = it.getString(it.getColumnIndexOrThrow(COLUMN_ALBUM)),
+                        filePath = it.getString(it.getColumnIndexOrThrow(COLUMN_FILE_PATH)),
+                        url = it.getString(it.getColumnIndexOrThrow(COLUMN_URL)),
+                        musicData = null // 不加载BLOB数据
+                    )
+                    musicTracks.add(musicItem)
                 } while (it.moveToNext())
             }
         }

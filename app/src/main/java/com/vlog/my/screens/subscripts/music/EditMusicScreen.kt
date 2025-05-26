@@ -24,7 +24,7 @@ import androidx.navigation.NavController
 @Composable
 fun EditMusicScreen(
     navController: NavController,
-    musicScriptId: String?, // Passed from navigation
+    scriptId: String?, // Passed from navigation
     viewModel: EditMusicViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current

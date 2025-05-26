@@ -1,5 +1,6 @@
 package com.vlog.my.screens.subscripts
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,7 +71,7 @@ fun SubScriptsScreen(
     val isLoggedIn = userViewModel.isLoggedIn()
     
     // 状态变量
-    var userScriptList by remember { mutableStateOf<List<SubScripts>>(emptyList()) }
+    var subScriptList by remember { mutableStateOf<List<SubScripts>>(emptyList()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showLogoEditDialog by remember { mutableStateOf(false) }
     var showPublishDialog by remember { mutableStateOf(false) }
@@ -84,7 +85,7 @@ fun SubScriptsScreen(
     
     // 加载API配置列表
     LaunchedEffect(Unit) {
-        userScriptList = scriptsDataHelper.getAllUserScripts()
+        subScriptList = scriptsDataHelper.getAllUserScripts()
     }
 
     // 删除确认对话框
@@ -97,7 +98,7 @@ fun SubScriptsScreen(
                 TextButton(
                     onClick = {
                         selectedSubScripts?.id?.let { scriptsDataHelper.deleteUserScripts(it) }
-                        userScriptList = scriptsDataHelper.getAllUserScripts()
+                        subScriptList = scriptsDataHelper.getAllUserScripts()
                         showDeleteDialog = false
                     }
                 ) {
@@ -121,7 +122,7 @@ fun SubScriptsScreen(
             onDismiss = { showLogoEditDialog = false },
             onLogoUpdated = { userScripts, logoPath ->
                 scriptsDataHelper.updateUserScriptsForLogo(userScripts.id ?: "",logoPath)
-                userScriptList = scriptsDataHelper.getAllUserScripts()
+                subScriptList = scriptsDataHelper.getAllUserScripts()
             }
         )
     }
@@ -223,44 +224,44 @@ fun SubScriptsScreen(
                 .padding(paddingValues)
         ) {
             
-            // 分享和下载按钮
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Button(
-                    onClick = {
-                        // 导航到分享小程序页面
-                        //navController?.navigate(Screen.ShareApp.createRoute(customDatabaseName))
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "分享",
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text("分享小程序")
-                }
-                
-                Button(
-                    onClick = {
-                        // 导航到下载小程序页面
-                        navController?.navigate(Screen.DownloadApp.createRoute())
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "下载",
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text("下载小程序")
-                }
-            }
-            
+//            // 分享和下载按钮
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(horizontal = 16.dp, vertical = 8.dp),
+//                horizontalArrangement = Arrangement.spacedBy(16.dp)
+//            ) {
+//                Button(
+//                    onClick = {
+//                        // 导航到分享小程序页面
+//                        //navController?.navigate(Screen.ShareApp.createRoute(customDatabaseName))
+//                    },
+//                    modifier = Modifier.weight(1f)
+//                ) {
+//                    Icon(
+//                        imageVector = Icons.Default.Share,
+//                        contentDescription = "分享",
+//                        modifier = Modifier.padding(end = 8.dp)
+//                    )
+//                    Text("分享小程序")
+//                }
+//
+//                Button(
+//                    onClick = {
+//                        // 导航到下载小程序页面
+//                        navController?.navigate(Screen.DownloadApp.createRoute())
+//                    },
+//                    modifier = Modifier.weight(1f)
+//                ) {
+//                    Icon(
+//                        imageVector = Icons.Default.Download,
+//                        contentDescription = "下载",
+//                        modifier = Modifier.padding(end = 8.dp)
+//                    )
+//                    Text("下载小程序")
+//                }
+//            }
+//
             // API配置列表标题
             Text(
                 text = "API配置",
@@ -270,7 +271,7 @@ fun SubScriptsScreen(
             )
             
             // API配置列表
-            if (userScriptList.isEmpty()) {
+            if (subScriptList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -281,21 +282,21 @@ fun SubScriptsScreen(
                 }
             } else {
                 LazyColumn {
-                    items(userScriptList) { userScripts ->
+                    items(subScriptList) { subScripts ->
                         SubScriptsItem(
-                            subScripts = userScripts,
+                            subScripts = subScripts,
                             onEditClick = {
-                                navController?.navigate("script_edit/${userScripts.id}")
+                                navController?.navigate("script_edit/${subScripts.id}")
                             },
                             onDeleteClick = {
-                                selectedSubScripts = userScripts
+                                selectedSubScripts = subScripts
                                 showDeleteDialog = true
                             },
                             onFetchDataClick = {
-                                navController?.navigate("item_list/${userScripts.id}")
+                                navController?.navigate("item_list/${subScripts.id}")
                             },
-                            onWorkClick = { userScripts ->
-                                navController?.navigate(Screen.Workers.createRoute(userScripts.id ?: ""))
+                            onWorkClick = { subScripts ->
+                                navController?.navigate(Screen.Workers.createRoute(subScripts.id ?: ""))
                             },
                             onLogoEditClick = { config ->
                                 selectedLogoSubScripts = config
@@ -310,12 +311,12 @@ fun SubScriptsScreen(
                                     navController?.navigate("login")
                                 }
                             },
-                            onManageTracksClick = { clickedUserScript ->
-                                if (clickedUserScript.id != null && clickedUserScript.databaseName != null) {
-                                    navController?.navigate(Screen.MusicTracks.createRoute(clickedUserScript.id!!, clickedUserScript.databaseName!!))
+                            onManageTracksClick = { clickedSubScript ->
+                                if (clickedSubScript.id != null && clickedSubScript.databaseName != null) {
+                                    navController?.navigate(Screen.MusicTracks.createRoute(clickedSubScript.id!!, clickedSubScript.databaseName!!))
                                 } else {
                                     // Optional: Log an error or show a toast if id or databaseName is null
-                                    android.util.Log.e("SubScriptsScreen", "Cannot navigate to MusicTracksScreen: id or databaseName is null. ID: ${clickedUserScript.id}, DBName: ${clickedUserScript.databaseName}")
+                                    Log.e("SubScriptsScreen", "Cannot navigate to MusicTracksScreen: id or databaseName is null. ID: ${clickedSubScript.id}, DBName: ${clickedSubScript.databaseName}")
                                 }
                             }
                         )

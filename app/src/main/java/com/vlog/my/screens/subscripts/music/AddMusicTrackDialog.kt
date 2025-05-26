@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import com.vlog.my.data.scripts.music.MusicFileUtils
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,7 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.vlog.my.data.scripts.music.MusicItem // Added import
+import com.vlog.my.data.scripts.music.MusicItem
 import kotlinx.coroutines.launch
 import java.io.IOException
 import androidx.compose.runtime.LaunchedEffect
@@ -77,16 +77,8 @@ fun AddMusicTrackDialog(
     ) { uri: Uri? ->
         uri?.let {
             selectedFileUri = it
-            selectedFileName = try {
-                context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
-                    val nameIndex = cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)
-                    cursor.moveToFirst()
-                    cursor.getString(nameIndex)
-                }
-            } catch (e: Exception) {
-                Log.e("AddMusicTrackDialog", "Error getting file name", e)
-                "Selected File"
-            }
+            // 使用MusicFileUtils获取文件名
+            selectedFileName = MusicFileUtils.getFileName(context, it) ?: "Selected File"
 
             // Clear previous music data and URL if a new file is selected
             musicDataState = null
@@ -95,15 +87,19 @@ fun AddMusicTrackDialog(
             coroutineScope.launch {
                 isReadingFile = true
                 try {
-                    context.contentResolver.openInputStream(it)?.use { inputStream ->
-                        musicDataState = inputStream.readBytes()
+                    // 使用MusicFileUtils读取音乐文件
+                    musicDataState = MusicFileUtils.readMusicFileToByteArray(context, it)
+                    // 如果文件过大，提示用户
+                    val fileSize = MusicFileUtils.getFileSize(context, it)
+                    if (fileSize > 10 * 1024 * 1024) { // 10MB
+                        Log.w("AddMusicTrackDialog", "文件大小超过10MB: $fileSize bytes")
+                        // 这里可以添加提示用户文件过大的逻辑
                     }
-                    // If successful, networkUrl is already cleared
                 } catch (e: IOException) {
-                    Log.e("AddMusicTrackDialog", "Error reading file", e)
-                    selectedFileName = null // Clear selection on error
+                    Log.e("AddMusicTrackDialog", "读取文件失败", e)
+                    selectedFileName = null // 清除选择
                     musicDataState = null
-                    // TODO: Show a toast or error message to the user
+                    // TODO: 向用户显示错误消息
                 } finally {
                     isReadingFile = false
                 }
