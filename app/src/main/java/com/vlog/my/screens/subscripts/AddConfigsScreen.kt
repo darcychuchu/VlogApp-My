@@ -19,16 +19,16 @@ import androidx.navigation.NavController
 import com.vlog.my.data.scripts.configs.MetasConfig 
 import kotlinx.coroutines.flow.collectLatest
 import java.util.UUID
+//
+//// Define RecursiveMetasConfigView and its helper MetaItemView here or in a shared UI file
 
-// Define RecursiveMetasConfigView and its helper MetaItemView here or in a shared UI file
 @Composable
-fun RecursiveMetasConfigView(
+private fun RecursiveMetasConfigView(
     label: String,
     metaItemList: MutableList<EditableMetaItem>,
-    viewModel: AddConfigsViewModel, // Or a common interface/base ViewModel
-    targetListType: String, // "basic" or "field" to call correct ViewModel methods
-    level: Int = 0,
-    parentClientSideId: String? = null // To add new items to the correct parent
+    viewModel: AddConfigsViewModel,
+    targetListType: String,
+    level: Int = 0
 ) {
     Column(modifier = Modifier.padding(start = (level * 16).dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -37,15 +37,16 @@ fun RecursiveMetasConfigView(
                 style = if (level == 0) MaterialTheme.typography.subtitle1 else MaterialTheme.typography.subtitle2,
                 modifier = Modifier.weight(1f)
             )
-            if (level == 0) { // Only allow adding root items from the main section header
+            if (level == 0) {
                 IconButton(onClick = {
                     val list = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
-                    viewModel.addMetaItem(list, null) {
-                        // For new items in Add screen, quoteId will be properly set during saveConfig.
-                        // Provide a temporary unique ID for now, e.g., the metaId of the new item.
-                        // The addMetaItem in ViewModel generates a new metaId for MetasConfig.
-                        // Let's use a temporary UUID string here.
-                        UUID.randomUUID().toString() 
+                    viewModel.addMetaItem(list, null) { // parentClientSideId is null for root items
+                        // quoteIdProducer logic for EditConfigsViewModel
+                        (if (targetListType == "basic") {
+                            viewModel.basicId.value // This is a State<String>, so .value is correct
+                        } else {
+                            viewModel.fieldId.value ?: UUID.randomUUID().toString() // Use existing fieldId or a new one if it's somehow null (should be rare if hasFieldsConfig is true)
+                        }).toString()
                     }
                 }) {
                     Icon(Icons.Filled.Add, contentDescription = "Add Root Meta for $label")
@@ -57,33 +58,31 @@ fun RecursiveMetasConfigView(
             EditableMetaItemView(
                 editableMetaItem = item,
                 viewModel = viewModel,
-                // targetList parameter removed from EditableMetaItemView call, not needed by it directly
-                allBasicMetas = viewModel.basicEditableMetas, 
-                allFieldMetas = viewModel.fieldEditableMetas, 
+                allBasicMetas = viewModel.basicEditableMetas,
+                allFieldMetas = viewModel.fieldEditableMetas,
                 level = level,
                 targetListType = targetListType // Pass targetListType for recursive calls
             ) {
-                // This lambda is for adding a child to the current item
-                // The list (basicEditableMetas or fieldEditableMetas) is determined by targetListType
+                // Add child to current item
                 val listContext = if (targetListType == "basic") viewModel.basicEditableMetas else viewModel.fieldEditableMetas
-                viewModel.addMetaItem(listContext, item.clientSideId) { item.metasConfig.quoteId } // Child inherits quoteId from parent
+                viewModel.addMetaItem(listContext, item.clientSideId) { item.metasConfig.quoteId } // Child inherits quoteId
             }
         }
-        if (metaItemList.isEmpty() && level > 0) { 
-             Text("No child metas.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+        if (metaItemList.isEmpty() && level > 0) {
+            Text("No child metas.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
         }
-         if (metaItemList.isEmpty() && level == 0) {
+        if (metaItemList.isEmpty() && level == 0) {
             Text("No metas added for $label.", style = MaterialTheme.typography.caption, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
         }
     }
 }
 
 @Composable
-fun EditableMetaItemView(
+private fun EditableMetaItemView(
     editableMetaItem: EditableMetaItem,
-    viewModel: AddConfigsViewModel, 
-    allBasicMetas: MutableList<EditableMetaItem>, 
-    allFieldMetas: MutableList<EditableMetaItem>, 
+    viewModel: AddConfigsViewModel,
+    allBasicMetas: MutableList<EditableMetaItem>,
+    allFieldMetas: MutableList<EditableMetaItem>,
     level: Int,
     targetListType: String, // Added to know which list to use for recursive calls
     onAddChild: () -> Unit
@@ -94,7 +93,7 @@ fun EditableMetaItemView(
 
     // Determine which root list this item (or its ancestor) belongs to for property updates and removal
     val rootListForOperations = if (targetListType == "basic") allBasicMetas else allFieldMetas
-    
+
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = (level * 4).dp), elevation = (2+level).dp) {
         Column(modifier = Modifier.padding(8.dp)) {
             ConfigTextField(
@@ -131,8 +130,8 @@ fun EditableMetaItemView(
                 }
             }
             if (editableMetaItem.children.isNotEmpty()) {
-                 RecursiveMetasConfigView(
-                    label = "Child Metas", 
+                RecursiveMetasConfigView(
+                    label = "Child Metas",
                     metaItemList = editableMetaItem.children,
                     viewModel = viewModel,
                     targetListType = targetListType, // Pass down the same type
@@ -189,6 +188,17 @@ fun AddConfigsScreen(
             item { ConfigTextField(label = "URL Type (Int, Default 0)", value = viewModel.urlTypedField.value.toString(), keyboardType = KeyboardType.Number, onValueChange = { viewModel.urlTypedField.value = it.toIntOrNull() ?: 0 }) }
             item { ConfigTextField(label = "Root Path*", value = viewModel.rootPath.value, error = viewModel.rootPathError.value, onValueChange = { viewModel.rootPath.value = it }) }
 
+            // Basic Metas
+            item { SectionSpacer() }
+            item {
+                RecursiveMetasConfigView(
+                    label = "Basic Metas (Optional)",
+                    metaItemList = viewModel.basicEditableMetas,
+                    viewModel = viewModel,
+                    targetListType = "basic"
+                )
+            }
+
             item { SectionSpacer() }
             item { 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -205,47 +215,40 @@ fun AddConfigsScreen(
                 item { ConfigTextField(label = "Content Field (Optional)", value = viewModel.contentField.value, onValueChange = { viewModel.contentField.value = it }) }
                 item { ConfigTextField(label = "Tags Field (Optional)", value = viewModel.tagsField.value, onValueChange = { viewModel.tagsField.value = it }) }
                 item { ConfigTextField(label = "Source URL Field (Optional)", value = viewModel.sourceUrlField.value, onValueChange = { viewModel.sourceUrlField.value = it }) }
+
+
+                // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
+                item { SectionSpacer() }
+                item {
+                    RecursiveMetasConfigView(
+                        label = "Field Metas (Optional)",
+                        metaItemList = viewModel.fieldEditableMetas,
+                        viewModel = viewModel,
+                        targetListType = "field"
+                    )
+                }
             }
 
-            // Basic Metas
-            item { SectionSpacer() }
-//            item {
-//                RecursiveMetasConfigView(
-//                    label = "Basic Metas (Optional)",
-//                    metaItemList = viewModel.basicEditableMetas,
-//                    viewModel = viewModel,
-//                    targetListType = "basic"
-//                )
-//            }
+            // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
+//            if (viewModel.hasFieldsConfig.value) {
 //
-//            // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
+//            }
+
+//            item { MetaListEditor("Basic Metas (Optional)", viewModel.basicEditableMetas, onAdd = {
+//                //viewModel.addMetaItem()
+//                viewModel.addMetaItem(viewModel.basicEditableMetas, null) { viewModel.basicId.value ?: UUID.randomUUID().toString()}
+//            }, onRemove = {
+//            }) }
+//
+//            // Field Metas (only if FieldsConfig is enabled)
 //            if (viewModel.hasFieldsConfig.value) {
 //                item { SectionSpacer() }
-//                item {
-//                    RecursiveMetasConfigView(
-//                        label = "Field Metas (Optional)",
-//                        metaItemList = viewModel.fieldEditableMetas,
-//                        viewModel = viewModel,
-//                        targetListType = "field"
-//                    )
-//                }
+//                item { MetaListEditor("Field Metas (Optional)", viewModel.fieldEditableMetas, onAdd = {
+//                    //viewModel.addFieldMeta()
+//                }, onRemove = {
+//                    //viewModel.removeFieldMeta(it)
+//                }) }
 //            }
-
-            item { MetaListEditor("Basic Metas (Optional)", viewModel.basicEditableMetas, onAdd = {
-                //viewModel.addMetaItem()
-                viewModel.addMetaItem(viewModel.basicEditableMetas, null) { viewModel.basicId.value ?: UUID.randomUUID().toString()}
-            }, onRemove = {
-            }) }
-            
-            // Field Metas (only if FieldsConfig is enabled)
-            if (viewModel.hasFieldsConfig.value) {
-                item { SectionSpacer() }
-                item { MetaListEditor("Field Metas (Optional)", viewModel.fieldEditableMetas, onAdd = {
-                    //viewModel.addFieldMeta()
-                }, onRemove = {
-                    //viewModel.removeFieldMeta(it)
-                }) }
-            }
             
             item { SectionSpacer() }
             item {

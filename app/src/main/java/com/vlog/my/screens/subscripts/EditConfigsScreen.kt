@@ -25,7 +25,7 @@ import java.util.UUID // Needed for EditableMetaItem default clientSideId
 // In a real project, these would be in a shared UI components file.
 
 @Composable
-fun RecursiveMetasConfigView(
+private fun RecursiveMetasConfigView(
     label: String,
     metaItemList: MutableList<EditableMetaItem>,
     viewModel: EditConfigsViewModel, 
@@ -80,7 +80,7 @@ fun RecursiveMetasConfigView(
 }
 
 @Composable
-fun EditableMetaItemView(
+private fun EditableMetaItemView(
     editableMetaItem: EditableMetaItem,
     viewModel: EditConfigsViewModel, 
     allBasicMetas: MutableList<EditableMetaItem>, 
@@ -213,6 +213,20 @@ fun EditConfigsScreen(
                     item { ConfigTextField(label = "URL Type (Int, Default 0)", value = viewModel.urlTypedField.value.toString(), keyboardType = KeyboardType.Number, onValueChange = { viewModel.urlTypedField.value = it.toIntOrNull() ?: 0 }) }
                     item { ConfigTextField(label = "Root Path*", value = viewModel.rootPath.value, error = viewModel.rootPathError.value, onValueChange = { viewModel.rootPath.value = it }) }
 
+
+
+                    // Basic Metas - Use RecursiveMetasConfigView
+                    item { SectionSpacer() }
+                    item {
+                        RecursiveMetasConfigView(
+                            label = "Basic Metas (Optional)",
+                            metaItemList = viewModel.basicEditableMetas,
+                            viewModel = viewModel,
+                            targetListType = "basic"
+                        )
+                    }
+
+
                     item { SectionSpacer() }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -237,21 +251,9 @@ fun EditConfigsScreen(
                         item { ConfigTextField(label = "Content Field (Optional)", value = viewModel.contentField.value, onValueChange = { viewModel.contentField.value = it }) }
                         item { ConfigTextField(label = "Tags Field (Optional)", value = viewModel.tagsField.value, onValueChange = { viewModel.tagsField.value = it }) }
                         item { ConfigTextField(label = "Source URL Field (Optional)", value = viewModel.sourceUrlField.value, onValueChange = { viewModel.sourceUrlField.value = it }) }
-                    }
 
-                    // Basic Metas - Use RecursiveMetasConfigView
-                    item { SectionSpacer() }
-                    item {
-                        RecursiveMetasConfigView(
-                            label = "Basic Metas (Optional)",
-                            metaItemList = viewModel.basicEditableMetas,
-                            viewModel = viewModel,
-                            targetListType = "basic"
-                        )
-                    }
 
-                    // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
-                    if (viewModel.hasFieldsConfig.value) {
+                        // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
                         item { SectionSpacer() }
                         item {
                             RecursiveMetasConfigView(
@@ -261,7 +263,13 @@ fun EditConfigsScreen(
                                 targetListType = "field"
                             )
                         }
+
                     }
+
+                    // Field Metas (only if FieldsConfig is enabled) - Use RecursiveMetasConfigView
+//                    if (viewModel.hasFieldsConfig.value) {
+//
+//                    }
 
                     item { SectionSpacer() }
                     item {
