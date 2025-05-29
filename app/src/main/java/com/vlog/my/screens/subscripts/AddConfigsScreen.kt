@@ -5,8 +5,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -169,7 +171,7 @@ fun AddConfigsScreen(
                 title = { Text("Add Configuration") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -183,6 +185,20 @@ fun AddConfigsScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item { Text("Basic Configuration", style = MaterialTheme.typography.h6) }
+
+            item {
+                ConfigTextField(
+                    label = "API URL*",
+                    value = viewModel.apiUrlField.value,
+                    error = viewModel.apiUrlError.value,
+                    onValueChange = { viewModel.apiUrlField.value = it },
+                    trailingIcon = {
+                        IconButton(onClick = { viewModel.initiateApiFormatting() }) { // Pass current URL via ViewModel property
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = "Format API URL")
+                        }
+                    }
+                )
+            }
             item { ConfigTextField(label = "API URL*", value = viewModel.apiUrlField.value, error = viewModel.apiUrlError.value, onValueChange = { viewModel.apiUrlField.value = it }) }
             item { ConfigTextField(label = "URL Parameters (Optional)", value = viewModel.urlParamsField.value, onValueChange = { viewModel.urlParamsField.value = it }) }
             item { ConfigTextField(label = "URL Type (Int, Default 0)", value = viewModel.urlTypedField.value.toString(), keyboardType = KeyboardType.Number, onValueChange = { viewModel.urlTypedField.value = it.toIntOrNull() ?: 0 }) }
@@ -269,7 +285,8 @@ fun ConfigTextField(
     value: String,
     error: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
-    onValueChange: (String) -> Unit
+    onValueChange: (String) -> Unit,
+    trailingIcon: @Composable (() -> Unit)? = null // Added trailingIcon parameter
 ) {
     OutlinedTextField(
         value = value,
@@ -278,7 +295,8 @@ fun ConfigTextField(
         modifier = Modifier.fillMaxWidth(),
         isError = error != null,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        singleLine = keyboardType != KeyboardType.Text // Allow multiline for general text
+        singleLine = keyboardType != KeyboardType.Text, // Allow multiline for general text
+        trailingIcon = trailingIcon // Pass trailingIcon to OutlinedTextField
     )
     error?.let {
         Text(text = it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption)

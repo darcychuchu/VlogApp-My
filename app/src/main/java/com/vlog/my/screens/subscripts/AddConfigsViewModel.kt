@@ -9,10 +9,15 @@ import com.vlog.my.data.scripts.configs.BasicsConfig
 import com.vlog.my.data.scripts.configs.ConfigsDataHelper
 import com.vlog.my.data.scripts.configs.FieldsConfig
 import com.vlog.my.data.scripts.configs.MetasConfig
+import com.vlog.my.utils.ApiResult
+import com.vlog.my.utils.JsonToBasicsConfigParser
+import com.vlog.my.utils.fetchJsonFromApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+
 
 // New data class for managing hierarchical MetasConfig in UI
 data class EditableMetaItem(
@@ -55,9 +60,55 @@ class AddConfigsViewModel(application: Application) : AndroidViewModel(applicati
     val idFieldError = mutableStateOf<String?>(null) // For FieldsConfig.idField
     val titleFieldError = mutableStateOf<String?>(null) // For FieldsConfig.titleField
 
-
     private val _saveResult = MutableSharedFlow<Boolean>()
     val saveResult = _saveResult.asSharedFlow()
+
+    // New members for API formatting
+    // private val apiDataFetcher = ApiDataFetcher() // Instantiation if not DI
+    private val jsonParser = JsonToBasicsConfigParser() // Instantiation if not DI
+
+    private val _snackbarMessages = MutableSharedFlow<String>()
+    val snackbarMessages: SharedFlow<String> = _snackbarMessages.asSharedFlow()
+
+
+    private val _navigateToConfigsScreen = MutableSharedFlow<Boolean>()
+    val navigateToConfigsScreen: SharedFlow<Boolean> = _navigateToConfigsScreen.asSharedFlow()
+
+
+    // Updated API URL formatting function
+    fun initiateApiFormatting() {
+        val apiUrl = apiUrlField.value
+        if (apiUrl.isBlank()) {
+            viewModelScope.launch {
+                _snackbarMessages.emit("API URL cannot be empty.")
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _snackbarMessages.emit("Formatting API, please wait...")
+            // Assuming ApiDataFetcher.fetchJsonFromApi is a top-level suspend function
+            when (val apiResult = fetchJsonFromApi(apiUrl)) { // Or use injected instance
+                is ApiResult.Success -> {
+                    val jsonData = apiResult.data
+                    val parseResult = jsonParser.parseJsonAndGenerateConfigs(jsonData, apiUrl)
+                    val configsList = parseResult.getOrNull()
+                    if (configsList.isNullOrEmpty()) {
+                        _snackbarMessages.emit("No list structures found in API response to generate configs.")
+                    } else {
+                        configsList.forEach { config ->
+                            dbHelper.insertBasicConfig(config)
+                        }
+                        _snackbarMessages.emit("${configsList.size} configuration(s) generated and saved.")
+                        _navigateToConfigsScreen.emit(true)
+                    }
+                }
+                is ApiResult.Error -> {
+                    _snackbarMessages.emit("API Error (${apiResult.statusCode ?: "N/A"}): ${apiResult.message}")
+                }
+            }
+        }
+    }
 
     // --- EditableMetaItem Management ---
 
